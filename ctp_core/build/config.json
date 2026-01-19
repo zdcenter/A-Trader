@@ -1,0 +1,19 @@
+{
+    "database": {
+        "connection_string": "postgresql://postgres:format@localhost:5432/atrader"
+    },
+    "ctp": {
+        "broker_id": "9999",
+        "user_id": "207611",
+        "password": "format^161021",
+        "md_front": "tcp://182.254.243.31:30011",
+        "td_front": "tcp://182.254.243.31:30001",
+        "user_product_info": "N160830ZSL",
+        "app_id": "simnow_client_test",
+        "auth_code": "0000000000000000"
+    },
+    "zmq": {
+        "pub_port": 5555,
+        "rep_port": 5556
+    }
+}
