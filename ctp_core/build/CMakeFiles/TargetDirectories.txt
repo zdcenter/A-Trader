@@ -1,3 +1,0 @@
-/home/zd/A-Trader/ctp_core/build/CMakeFiles/ctp_core.dir
-/home/zd/A-Trader/ctp_core/build/CMakeFiles/edit_cache.dir
-/home/zd/A-Trader/ctp_core/build/CMakeFiles/rebuild_cache.dir

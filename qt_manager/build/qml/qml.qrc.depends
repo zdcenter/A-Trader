@@ -1,9 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>main.qml</file>
-        <file>AccountInfoPanel.qml</file>
-        <file>MarketQuotePanel.qml</file>
-        <file>PositionPanel.qml</file>
-        <file>OrderPanel.qml</file>
-    </qresource>
-</RCC>
