@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <vector>
 
+#include "storage/DBManager.h"
+
 namespace atrad {
 
 MdHandler::MdHandler(Publisher& pub, std::map<std::string, std::string> config, std::set<std::string> contracts) 
@@ -153,12 +155,17 @@ void MdHandler::subscribe() {
     }
 }
 
+
+
 void MdHandler::subscribe(const std::string& instrument) {
     if (md_api_) {
         char* id = const_cast<char*>(instrument.c_str());
         md_api_->SubscribeMarketData(&id, 1);
         contracts_.insert(instrument);
         std::cout << "[Md] Sent live subscription for: " << instrument << std::endl;
+        
+        // 持久化订阅
+        DBManager::instance().addSubscription(instrument);
     }
 }
 
@@ -168,6 +175,9 @@ void MdHandler::unsubscribe(const std::string& instrument) {
         md_api_->UnSubscribeMarketData(&id, 1);
         contracts_.erase(instrument);
         std::cout << "[Md] Sent live unsubscription for: " << instrument << std::endl;
+        
+        // 移除订阅
+        DBManager::instance().removeSubscription(instrument);
     }
 }
 

@@ -1,6 +1,7 @@
 #include "network/ZmqWorker.h"
 #include "protocol/zmq_topics.h"
 #include <QDebug>
+#include <QCoreApplication>
 
 namespace atrad {
 
@@ -41,6 +42,9 @@ void ZmqWorker::process() {
         bool ctpStatus = false;
 
         while (_running) {
+            // 处理队列中的信号槽事件 (例如 sendCommand)
+            QCoreApplication::processEvents();
+            
             // Poll 100ms
             zmq::poll(items, 1, 100);
 
@@ -82,8 +86,7 @@ void ZmqWorker::process() {
                  bool currentCore = false;
                  try {
                      zmq::socket_t req(_context, zmq::socket_type::req);
-                     std::string addr = zmq_topics::REP_CMD_ADDR;
-                     size_t pos = addr.find("*"); if(pos!=std::string::npos) addr.replace(pos, 1, "localhost");
+                     std::string addr = zmq_topics::REQ_CMD_ADDR;
                      
                      req.connect(addr);
                      // 快速超时检测 (300ms)
@@ -129,11 +132,7 @@ void ZmqWorker::sendCommand(const QString& json) {
         zmq::socket_t requester(_context, zmq::socket_type::req);
         
         // 修复: connect 不支持通配符 *，需要替换为 localhost
-        std::string addr = zmq_topics::REP_CMD_ADDR;
-        size_t pos = addr.find("*");
-        if (pos != std::string::npos) {
-            addr.replace(pos, 1, "localhost");
-        }
+        std::string addr = zmq_topics::REQ_CMD_ADDR;
         
         qDebug() << "[ZmqWorker] Connecting to:" << QString::fromStdString(addr);
         requester.connect(addr);

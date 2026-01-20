@@ -4,21 +4,20 @@
 #include <QHash>
 #include <QVector>
 #include <QString>
+#include "../../../shared/protocol/message_schema.h"
 
 namespace atrad {
 
 struct PositionItem {
-    QString instrumentId;
-    char direction; // '0'多, '1'空
-    int position;
-    int todayPosition;
-    int ydPosition;
-    double cost;
+    PositionData data;
+    // Helper fields for UI
+    QString instrumentId; 
+    double lastPrice; 
     double profit;
-    double lastPrice; // 新增：最后行情价
 };
 
 class PositionModel : public QAbstractListModel {
+
     Q_OBJECT
 public:
     enum PositionRoles {
@@ -42,8 +41,8 @@ public:
 
 public slots:
     void updatePosition(const QString& json);
-    void updatePrice(const QString& json); // 新增：接收行情 Tick 更新盈亏
-    void updateInstrument(const QString& json); // 新增：接收合约字典
+    void updatePrice(const QString& json); 
+    void updateInstrument(const QString& json); 
 
 signals:
     void totalProfitChanged(double totalProfit);
@@ -51,22 +50,13 @@ signals:
 private:
     void calculateProfit(PositionItem& item);
     QVector<PositionItem> _position_data;
-    QHash<QString, QVector<int>> _instrument_to_indices; // 一个品种可能有多空两个持仓行
+    QHash<QString, QVector<int>> _instrument_to_indices; 
     
-    struct InstrumentInfo {
-        int multiple;
-        double tick;
-        // 保证金率
-        double longMarginRatio;
-        double shortMarginRatio;
-        // 手续费率 (简化，主要存按金额的)
-        double openRatio;
-        double closeRatio;
-        double closeTodayRatio;
-    };
-    QHash<QString, InstrumentInfo> _instrument_dict;
+    // Use shared InstrumentData
+    QHash<QString, InstrumentData> _instrument_dict;
     
     double _total_profit = 0.0;
 };
+
 
 } // namespace atrad

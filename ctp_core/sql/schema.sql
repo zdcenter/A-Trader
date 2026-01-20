@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS tb_subscriptions (
 -- Instruments Table
 CREATE TABLE IF NOT EXISTS tb_instruments (
     instrument_id VARCHAR(32) PRIMARY KEY,
+    instrument_name VARCHAR(64), -- Added
     exchange_id VARCHAR(16),
     -- 增加品种ID，方便做品种级别的配置查询
     product_id VARCHAR(16), 

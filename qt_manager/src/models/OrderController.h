@@ -6,6 +6,7 @@
 #include <QVariant>
 #include <QList>
 #include <nlohmann/json.hpp>
+#include "protocol/message_schema.h" // Shared Schema
 
 namespace atrad {
 
@@ -107,18 +108,8 @@ private:
     bool _ctpConnected = false;
     
     QVariantList _bidPrices, _bidVolumes, _askPrices, _askVolumes;
-
-    struct InstrumentInfo {
-        QString id;
-        QString exchange;
-        double priceTick;
-        int multiple;
-        double longMarginRatio;
-        double shortMarginRatio;
-        double openRatioByMoney;
-        double openRatioByVol;
-    };
-    QHash<QString, InstrumentInfo> _instrument_dict;
+    
+    QHash<QString, InstrumentData> _instrument_dict;
 };
 
 } // namespace atrad

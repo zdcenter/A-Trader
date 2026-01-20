@@ -4,29 +4,19 @@
 #include <QHash>
 #include <QVector>
 #include <QString>
+#include "../../../shared/protocol/message_schema.h"
 
 namespace atrad {
 
 struct MarketItem {
-    QString instrumentId;
-    double lastPrice;        // 最新价
-    double preClose;         // 昨收价
+    TickData data;
+    
+    // UI 专用的缓存/计算字段
+    QString instrumentId; 
+    double preClose;         // 显示用的昨收（可能是 PreSettlement）
     double change;           // 涨跌额
     double changePercent;    // 涨跌幅 %
-    int volume;              // 成交量
-    int openInterest;        // 持仓量
-    double bidPrice1;        // 买一价
-    int bidVolume1;          // 买一量
-    double askPrice1;        // 卖一价
-    int askVolume1;          // 卖一量
-    QString updateTime;      // 更新时间
-    double turnover;         // 成交金额
-    double upperLimit;       // 涨停板
-    double lowerLimit;       // 跌停板
-    double openPrice;        // 开盘价
-    double highestPrice;     // 最高价
-    double lowestPrice;      // 最低价
-    double averagePrice;     // 均价
+    QString updateTime;      // 字符串格式时间
 };
 
 class MarketModel : public QAbstractListModel {
@@ -80,6 +70,9 @@ public slots:
     // 排序操作
     Q_INVOKABLE void moveToTop(int index);
     Q_INVOKABLE void moveToBottom(int index);
+    
+    // 强制重排合约顺序 (用于启动时恢复)
+    Q_INVOKABLE void setInstrumentOrder(const QStringList& ids);
     
     // 检查合约是否已存在
     Q_INVOKABLE bool hasInstrument(const QString& instrumentId) const;

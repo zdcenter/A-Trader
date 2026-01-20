@@ -83,6 +83,7 @@ struct AccountData {
 // 合约属性数据
 struct InstrumentData {
     char instrument_id[64];
+    char instrument_name[64]; // Added
     char exchange_id[16];
     char product_id[16];            // 品种ID
     char underlying_instr_id[64];   // 标的合约ID

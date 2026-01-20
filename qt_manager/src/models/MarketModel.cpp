@@ -1,6 +1,7 @@
 #include "models/MarketModel.h"
 #include <nlohmann/json.hpp>
 #include <QDebug>
+#include <cstring> // for strncpy, memset
 
 namespace atrad {
 
@@ -20,24 +21,24 @@ QVariant MarketModel::data(const QModelIndex &index, int role) const {
     const auto &item = _market_data.at(index.row());
     switch (role) {
         case IdRole: return item.instrumentId;
-        case PriceRole: return item.lastPrice;
+        case PriceRole: return item.data.last_price;
         case PreCloseRole: return item.preClose;
         case ChangeRole: return item.change;
         case ChangePercentRole: return item.changePercent;
-        case VolumeRole: return item.volume;
-        case OpenInterestRole: return item.openInterest;
-        case BidPrice1Role: return item.bidPrice1;
-        case BidVolume1Role: return item.bidVolume1;
-        case AskPrice1Role: return item.askPrice1;
-        case AskVolume1Role: return item.askVolume1;
+        case VolumeRole: return item.data.volume;
+        case OpenInterestRole: return item.data.open_interest;
+        case BidPrice1Role: return item.data.bid_price1;
+        case BidVolume1Role: return item.data.bid_volume1;
+        case AskPrice1Role: return item.data.ask_price1;
+        case AskVolume1Role: return item.data.ask_volume1;
         case TimeRole: return item.updateTime;
-        case TurnoverRole: return item.turnover;
-        case UpperLimitRole: return item.upperLimit;
-        case LowerLimitRole: return item.lowerLimit;
-        case OpenPriceRole: return item.openPrice;
-        case HighestPriceRole: return item.highestPrice;
-        case LowestPriceRole: return item.lowestPrice;
-        case AveragePriceRole: return item.averagePrice;
+        case TurnoverRole: return item.data.turnover;
+        case UpperLimitRole: return item.data.upper_limit_price;
+        case LowerLimitRole: return item.data.lower_limit_price;
+        case OpenPriceRole: return item.data.open_price;
+        case HighestPriceRole: return item.data.highest_price;
+        case LowestPriceRole: return item.data.lowest_price;
+        case AveragePriceRole: return item.data.average_price;
         default: return QVariant();
     }
 }
@@ -69,85 +70,80 @@ QHash<int, QByteArray> MarketModel::roleNames() const {
 void MarketModel::updateTick(const QString& json) {
     try {
         auto j = nlohmann::json::parse(json.toStdString());
-        QString id = QString::fromStdString(j["id"]);
-        double price = j["price"];
-        int volume = j["volume"];
-        int oi = j.value("oi", 0);
-        double b1 = j.value("b1", 0.0);
-        int bv1 = j.value("bv1", 0);
-        double a1 = j.value("a1", 0.0);
-        int av1 = j.value("av1", 0);
-        QString time = QString::fromStdString(j["time"]);
-
-        // 解析昨结和昨收
-        double preSettlement = j.value("pre_settlement", 0.0);
-        double preCloseRaw = j.value("pre_close", 0.0);
+        QString id;
+        if(j.contains("instrument_id")) id = QString::fromStdString(j["instrument_id"]);
+        else if(j.contains("id")) id = QString::fromStdString(j["id"]);
         
-        // 用于计算涨跌的基准价：期货通常优先使用昨结算价
-        double basePrice = preSettlement;
-        if (basePrice < 0.0001) basePrice = preCloseRaw;
-        
-        double turnover = j.value("turnover", 0.0);
-        double limitUp = j.value("limit_up", 0.0);
-        double limitDown = j.value("limit_down", 0.0);
-        double open = j.value("open", 0.0);
-        double high = j.value("high", 0.0);
-        double low = j.value("low", 0.0);
-        double avg = j.value("avg_price", 0.0);
+        if (id.isEmpty()) return;
 
+        int row = -1;
         if (_instrument_to_index.contains(id)) {
-            int row = _instrument_to_index[id];
-            auto& item = _market_data[row];
-            
-            // 更新基础数据
-            item.lastPrice = price;
-            item.volume = volume;
-            item.openInterest = oi;
-            item.bidPrice1 = b1;
-            item.bidVolume1 = bv1;
-            item.askPrice1 = a1;
-            item.askVolume1 = av1;
-            item.updateTime = time;
-            
-            // 更新扩展数据
-            if (basePrice > 0.0001) item.preClose = basePrice;
-            item.turnover = turnover;
-            item.upperLimit = limitUp;
-            item.lowerLimit = limitDown;
-            item.openPrice = open;
-            item.highestPrice = high;
-            item.lowestPrice = low;
-            item.averagePrice = avg;
-            
-            // 计算涨跌（使用最新的 preClose）
-            if (item.preClose > 0.0001) {
-                item.change = price - item.preClose;
-                item.changePercent = (item.change / item.preClose) * 100.0;
-            }
-            
-            emit dataChanged(index(row), index(row));
+            row = _instrument_to_index[id];
         } else {
-            // 新合约，初始化所有字段
-            beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
-            _instrument_to_index[id] = _market_data.count();
-            
-            double change = 0.0;
-            double changePercent = 0.0;
-            if (basePrice > 0.0001) {
-                change = price - basePrice;
-                changePercent = (change / basePrice) * 100.0;
-            }
-            
-            _market_data.append({
-                id, price, basePrice, change, changePercent, 
-                volume, oi, b1, bv1, a1, av1, time,
-                turnover, limitUp, limitDown,
-                open, high, low, avg // O/H/L/Avg
-            });
-            endInsertRows();
+             beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
+             _instrument_to_index[id] = _market_data.count();
+             MarketItem newItem;
+             std::memset(&newItem.data, 0, sizeof(TickData));
+             newItem.instrumentId = id;
+             // also copy to data.instrument_id
+             strncpy(newItem.data.instrument_id, id.toStdString().c_str(), sizeof(newItem.data.instrument_id)-1);
+             // initialized other UI fields
+             newItem.preClose = 0.0; newItem.change = 0.0; newItem.changePercent = 0.0; newItem.updateTime = "--";
+
+             _market_data.append(newItem);
+             row = _market_data.count() - 1;
+             endInsertRows();
         }
+        
+        // Ensure row is valid
+        if(row < 0 || row >= _market_data.size()) return;
+        
+        auto& item = _market_data[row];
+        auto& d = item.data;
+
+        // Parse JSON to TickData
+        if(j.contains("last_price")) d.last_price = j["last_price"]; else d.last_price = j.value("price", 0.0);
+        if(j.contains("volume")) d.volume = j["volume"];
+        if(j.contains("open_interest")) d.open_interest = j["open_interest"]; else d.open_interest = j.value("oi", 0.0);
+
+        if(j.contains("bid_price1")) d.bid_price1 = j["bid_price1"]; else d.bid_price1 = j.value("b1", 0.0);
+        if(j.contains("bid_volume1")) d.bid_volume1 = j["bid_volume1"]; else d.bid_volume1 = j.value("bv1", 0);
+        if(j.contains("ask_price1")) d.ask_price1 = j["ask_price1"]; else d.ask_price1 = j.value("a1", 0.0);
+        if(j.contains("ask_volume1")) d.ask_volume1 = j["ask_volume1"]; else d.ask_volume1 = j.value("av1", 0);
+
+        QString timeStr;
+        if(j.contains("update_time")) timeStr = QString::fromStdString(j["update_time"]); 
+        else timeStr = QString::fromStdString(j.value("time", ""));
+        item.updateTime = timeStr;
+        strncpy(d.update_time, timeStr.toStdString().c_str(), sizeof(d.update_time)-1);
+        
+        if(j.contains("pre_settlement_price")) d.pre_settlement_price = j["pre_settlement_price"]; else d.pre_settlement_price = j.value("pre_settlement", 0.0);
+        if(j.contains("pre_close_price")) d.pre_close_price = j["pre_close_price"]; else d.pre_close_price = j.value("pre_close", 0.0);
+        
+        if(j.contains("turnover")) d.turnover = j["turnover"];
+        double limitUp = 0.0; if(j.contains("upper_limit_price")) limitUp = j["upper_limit_price"]; else limitUp = j.value("limit_up", 0.0);
+        d.upper_limit_price = limitUp;
+        double limitDown = 0.0; if(j.contains("lower_limit_price")) limitDown = j["lower_limit_price"]; else limitDown = j.value("limit_down", 0.0);
+        d.lower_limit_price = limitDown;
+        
+        if(j.contains("open_price")) d.open_price = j["open_price"]; else d.open_price = j.value("open", 0.0);
+        if(j.contains("highest_price")) d.highest_price = j["highest_price"]; else d.highest_price = j.value("high", 0.0);
+        if(j.contains("lowest_price")) d.lowest_price = j["lowest_price"]; else d.lowest_price = j.value("low", 0.0);
+        if(j.contains("average_price")) d.average_price = j["average_price"]; else d.average_price = j.value("avg_price", 0.0);
+
+        // Calculated fields for UI
+        double basePrice = d.pre_settlement_price;
+        if (basePrice < 0.0001) basePrice = d.pre_close_price;
+        item.preClose = basePrice;
+        
+        item.change = d.last_price - basePrice;
+        item.changePercent = (basePrice > 0) ? (item.change / basePrice * 100.0) : 0.0;
+        
+        emit dataChanged(index(row), index(row));
+    } catch (const std::exception& e) {
+        qDebug() << "[MarketModel] updateTick Error:" << e.what();
     } catch (...) {
-        // 解析失败，忽略
+        qDebug() << "[MarketModel] updateTick Unknown Error";
     }
 }
 
@@ -155,22 +151,27 @@ void MarketModel::handleInstrument(const QString& json) {
     qDebug() << "[MarketModel] handleInstrument called with:" << json;
     try {
         auto j = nlohmann::json::parse(json.toStdString());
-        QString id = QString::fromStdString(j["id"]);
+        QString id;
+        if(j.contains("instrument_id")) id = QString::fromStdString(j["instrument_id"]);
+        else if(j.contains("id")) id = QString::fromStdString(j["id"]);
+        
+        if (id.isEmpty()) return;
         
         qDebug() << "[MarketModel] Parsed instrument ID:" << id;
-        
-        // 如果列表中还没有这个合约，先添加一个占位行
+
         if (!_instrument_to_index.contains(id)) {
             qDebug() << "[MarketModel] Adding new instrument:" << id;
             beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
             _instrument_to_index[id] = _market_data.count();
-            // 初始化所有字段为0或空
-            _market_data.append({
-                id, 0.0, 0.0, 0.0, 0.0, 
-                0, 0, 0.0, 0, 0.0, 0, "--:--:--",
-                0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0
-            });
+            
+            MarketItem item;
+            std::memset(&item.data, 0, sizeof(TickData));
+            item.instrumentId = id;
+            strncpy(item.data.instrument_id, id.toStdString().c_str(), sizeof(item.data.instrument_id)-1);
+            // Default init
+            item.preClose = 0; item.change = 0; item.changePercent = 0; item.updateTime = "--";
+            
+            _market_data.append(item);
             endInsertRows();
             qDebug() << "[MarketModel] Instrument added successfully";
         } else {
@@ -184,18 +185,22 @@ void MarketModel::handleInstrument(const QString& json) {
 }
 
 void MarketModel::addInstrument(const QString& instrumentId) {
+    if (instrumentId.isEmpty()) return;
     if (_instrument_to_index.contains(instrumentId)) return;
     
     beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
     _instrument_to_index[instrumentId] = _market_data.count();
     
-    // 初始化占位数据
-    _market_data.append({
-        instrumentId, 0.0, 0.0, 0.0, 0.0, 
-        0, 0, 0.0, 0, 0.0, 0, "等待数据...",
-        0.0, 0.0, 0.0, 
-        0.0, 0.0, 0.0, 0.0
-    });
+    MarketItem item;
+    std::memset(&item.data, 0, sizeof(TickData));
+    item.instrumentId = instrumentId;
+    strncpy(item.data.instrument_id, instrumentId.toStdString().c_str(), sizeof(item.data.instrument_id)-1);
+    
+    // UI defaults
+    item.updateTime = "等待数据...";
+    item.preClose = 0; item.change = 0; item.changePercent = 0;
+    
+    _market_data.append(item);
     
     endInsertRows();
     qDebug() << "[MarketModel] Manually added instrument:" << instrumentId;
@@ -227,7 +232,6 @@ void MarketModel::move(int from, int to) {
         _market_data.move(from, to); 
         
         // 重建索引
-        // 优化：其实只用重建 min(from,to) 到 max(from,to) 范围的，但这里简单处理
         _instrument_to_index.clear();
         for (int i = 0; i < _market_data.size(); ++i) {
             _instrument_to_index[_market_data[i].instrumentId] = i;
@@ -275,6 +279,55 @@ void MarketModel::moveToBottom(int index) {
 
 bool MarketModel::hasInstrument(const QString& instrumentId) const {
     return _instrument_to_index.contains(instrumentId);
+}
+
+void MarketModel::setInstrumentOrder(const QStringList& ids) {
+    if (ids.isEmpty()) return;
+    
+    qDebug() << "[MarketModel] Reordering instruments...";
+    
+    // 使用 resetModel 一次性刷新整个视图，避免大量信号
+    beginResetModel();
+    
+    QVector<MarketItem> newData;
+    QSet<QString> processedIds;
+    
+    // 1. 优先按照传入列表的顺序添加已存在的合约
+    for (const auto& id : ids) {
+        if (id.isEmpty()) continue;
+        if (_instrument_to_index.contains(id)) {
+            newData.append(_market_data[_instrument_to_index[id]]);
+            processedIds.insert(id);
+        } else {
+            // 如果列表中有但内存里没有，应该新建吗？
+            // 是的，恢复订阅时这就是“添加”逻辑
+            MarketItem item;
+            std::memset(&item.data, 0, sizeof(TickData));
+            item.instrumentId = id;
+            strncpy(item.data.instrument_id, id.toStdString().c_str(), sizeof(item.data.instrument_id)-1);
+            item.preClose = 0; item.change = 0; item.changePercent = 0; item.updateTime = "等待数据...";
+            newData.append(item);
+            processedIds.insert(id);
+        }
+    }
+    
+    // 2. 把剩余的（可能是刚才 ZMQ 推送的新合约，但不在 saved list 里）放到最后
+    for (const auto& item : _market_data) {
+        if (!processedIds.contains(item.instrumentId)) {
+            newData.append(item);
+        }
+    }
+    
+    _market_data = newData;
+    
+    // 重建索引
+    _instrument_to_index.clear();
+    for (int i = 0; i < _market_data.size(); ++i) {
+        _instrument_to_index[_market_data[i].instrumentId] = i;
+    }
+    
+    endResetModel();
+    qDebug() << "[MarketModel] Reorder completed. Total:" << _market_data.size();
 }
 
 } // namespace atrad

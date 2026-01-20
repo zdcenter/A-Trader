@@ -23,68 +23,56 @@ void Publisher::init(const std::string& addr) {
 }
 
 void Publisher::publishTick(const TickData& data) {
-    // 将结构体转换为 JSON
     nlohmann::json j;
-    j["id"] = data.instrument_id;
-    j["price"] = data.last_price;
+    j["instrument_id"] = data.instrument_id;
+    j["last_price"] = data.last_price;
     j["volume"] = data.volume;
-    j["oi"] = data.open_interest;
-    j["b1"] = data.bid_price1;
-    j["bv1"] = data.bid_volume1;
-    j["a1"] = data.ask_price1;
-    j["av1"] = data.ask_volume1;
+    j["open_interest"] = data.open_interest;
     
-    // 5档行情
-    j["b2"] = data.bid_price2; j["bv2"] = data.bid_volume2;
-    j["a2"] = data.ask_price2; j["av2"] = data.ask_volume2;
-    j["b3"] = data.bid_price3; j["bv3"] = data.bid_volume3;
-    j["a3"] = data.ask_price3; j["av3"] = data.ask_volume3;
-    j["b4"] = data.bid_price4; j["bv4"] = data.bid_volume4;
-    j["a4"] = data.ask_price4; j["av4"] = data.ask_volume4;
-    j["b5"] = data.bid_price5; j["bv5"] = data.bid_volume5;
-    j["a5"] = data.ask_price5; j["av5"] = data.ask_volume5;
+    // 5档行情 使用标准数组或明确的字段
+    j["bid_price1"] = data.bid_price1; j["bid_volume1"] = data.bid_volume1;
+    j["ask_price1"] = data.ask_price1; j["ask_volume1"] = data.ask_volume1;
+    j["bid_price2"] = data.bid_price2; j["bid_volume2"] = data.bid_volume2;
+    j["ask_price2"] = data.ask_price2; j["ask_volume2"] = data.ask_volume2;
+    j["bid_price3"] = data.bid_price3; j["bid_volume3"] = data.bid_volume3;
+    j["ask_price3"] = data.ask_price3; j["ask_volume3"] = data.ask_volume3;
+    j["bid_price4"] = data.bid_price4; j["bid_volume4"] = data.bid_volume4;
+    j["ask_price4"] = data.ask_price4; j["ask_volume4"] = data.ask_volume4;
+    j["bid_price5"] = data.bid_price5; j["bid_volume5"] = data.bid_volume5;
+    j["ask_price5"] = data.ask_price5; j["ask_volume5"] = data.ask_volume5;
     
-    j["time"] = data.update_time;
-    j["ms"] = data.update_millisec;
+    j["update_time"] = data.update_time;
+    j["update_millisec"] = data.update_millisec;
     
-    // 扩展字段
     j["turnover"] = data.turnover;
-    j["pre_close"] = data.pre_close_price;
-    j["pre_settlement"] = data.pre_settlement_price;
-    j["limit_up"] = data.upper_limit_price;
-    j["limit_down"] = data.lower_limit_price;
-    j["open"] = data.open_price;
-    j["high"] = data.highest_price;
-    j["low"] = data.lowest_price;
-    j["close"] = data.close_price;
-    j["settlement"] = data.settlement_price;
-    j["avg_price"] = data.average_price;
+    j["pre_close_price"] = data.pre_close_price;
+    j["pre_settlement_price"] = data.pre_settlement_price;
+    j["upper_limit_price"] = data.upper_limit_price;
+    j["lower_limit_price"] = data.lower_limit_price;
+    j["open_price"] = data.open_price;
+    j["highest_price"] = data.highest_price;
+    j["lowest_price"] = data.lowest_price;
+    j["close_price"] = data.close_price;
+    j["settlement_price"] = data.settlement_price;
+    j["average_price"] = data.average_price;
     j["action_day"] = data.action_day;
     j["trading_day"] = data.trading_day;
 
     std::string payload = j.dump();
 
-    // 发送 Topic (MT)
-    zmq::message_t topic_msg(zmq_topics::MARKET_DATA, 2);
-    publisher_->send(topic_msg, zmq::send_flags::sndmore);
-
-    // 发送 Payload
-    zmq::message_t payload_msg(payload.data(), payload.size());
-    publisher_->send(payload_msg, zmq::send_flags::none);
-
-    // 日志 (测试用，正式环境可关闭)
-    // std::cout << "[Publisher] Published: " << data.instrument_id << " " << data.last_price << std::endl;
+    publisher_->send(zmq::message_t(zmq_topics::MARKET_DATA, 2), zmq::send_flags::sndmore);
+    publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
 }
 
 void Publisher::publishPosition(const PositionData& data) {
     nlohmann::json j;
-    j["id"] = data.instrument_id;
-    j["dir"] = data.direction;
-    j["pos"] = data.position;
-    j["td"] = data.today_position;
-    j["yd"] = data.yd_position;
-    j["cost"] = data.position_cost;
-    j["profit"] = data.pos_profit;
+    j["instrument_id"] = data.instrument_id;
+    j["direction"] = std::string(1, data.direction); // char to string
+    j["position"] = data.position;
+    j["today_position"] = data.today_position;
+    j["yd_position"] = data.yd_position;
+    j["position_cost"] = data.position_cost;
+    j["pos_profit"] = data.pos_profit;
 
     std::string payload = j.dump();
     
@@ -94,11 +82,11 @@ void Publisher::publishPosition(const PositionData& data) {
 
 void Publisher::publishAccount(const AccountData& data) {
     nlohmann::json j;
-    j["bal"] = data.balance;
-    j["avail"] = data.available;
+    j["balance"] = data.balance;
+    j["available"] = data.available;
     j["margin"] = data.margin;
-    j["frozen"] = data.frozen_margin;
-    j["comm"] = data.commission;
+    j["frozen_margin"] = data.frozen_margin;
+    j["commission"] = data.commission;
 
     std::string payload = j.dump();
 
@@ -108,24 +96,25 @@ void Publisher::publishAccount(const AccountData& data) {
 
 void Publisher::publishInstrument(const InstrumentData& data) {
     nlohmann::json j;
-    j["id"] = data.instrument_id;
-    j["exch"] = data.exchange_id;
-    j["mult"] = data.volume_multiple;
-    j["tick"] = data.price_tick;
+    j["instrument_id"] = data.instrument_id;
+    j["instrument_name"] = data.instrument_name;
+    j["exchange_id"] = data.exchange_id;
+    j["volume_multiple"] = data.volume_multiple;
+    j["price_tick"] = data.price_tick;
 
     // 保证金率
-    j["l_m_money"] = data.long_margin_ratio_by_money;
-    j["l_m_vol"] = data.long_margin_ratio_by_volume;
-    j["s_m_money"] = data.short_margin_ratio_by_money;
-    j["s_m_vol"] = data.short_margin_ratio_by_volume;
+    j["long_margin_ratio_by_money"] = data.long_margin_ratio_by_money;
+    j["long_margin_ratio_by_volume"] = data.long_margin_ratio_by_volume;
+    j["short_margin_ratio_by_money"] = data.short_margin_ratio_by_money;
+    j["short_margin_ratio_by_volume"] = data.short_margin_ratio_by_volume;
 
     // 手续费率
-    j["o_r_money"] = data.open_ratio_by_money;
-    j["o_r_vol"] = data.open_ratio_by_volume;
-    j["c_r_money"] = data.close_ratio_by_money;
-    j["c_r_vol"] = data.close_ratio_by_volume;
-    j["ct_r_money"] = data.close_today_ratio_by_money;
-    j["ct_r_vol"] = data.close_today_ratio_by_volume;
+    j["open_ratio_by_money"] = data.open_ratio_by_money;
+    j["open_ratio_by_volume"] = data.open_ratio_by_volume;
+    j["close_ratio_by_money"] = data.close_ratio_by_money;
+    j["close_ratio_by_volume"] = data.close_ratio_by_volume;
+    j["close_today_ratio_by_money"] = data.close_today_ratio_by_money;
+    j["close_today_ratio_by_volume"] = data.close_today_ratio_by_volume;
 
     std::string payload = j.dump();
 

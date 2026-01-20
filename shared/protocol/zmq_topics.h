@@ -26,11 +26,11 @@ inline const char* CMD_STRATEGY = "CMD_STR";
 
 // 行情发布地址 (Port 5555)
 inline const char* PUB_MARKET_ADDR = "tcp://*:5555";
-inline const char* SUB_MARKET_ADDR = "tcp://localhost:5555";
+inline const char* SUB_MARKET_ADDR = "tcp://127.0.0.1:5555";
 
 // 指令接收地址 (Port 5556)
 inline const char* REP_CMD_ADDR = "tcp://*:5556";
-inline const char* REQ_CMD_ADDR = "tcp://localhost:5556";
+inline const char* REQ_CMD_ADDR = "tcp://127.0.0.1:5556";
 
 } // namespace zmq_topics
 } // namespace atrad

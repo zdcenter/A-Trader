@@ -49,6 +49,32 @@ std::vector<std::string> DBManager::loadSubscriptions() {
     return subs;
 }
 
+void DBManager::addSubscription(const std::string& instrumentId) {
+    if (connStr_.empty()) return;
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::work w(c);
+        w.exec_params("INSERT INTO tb_subscriptions (instrument_id) VALUES ($1) ON CONFLICT (instrument_id) DO NOTHING", instrumentId);
+        w.commit();
+        std::cout << "[DB] Added subscription: " << instrumentId << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] Add Sub Error: " << e.what() << std::endl;
+    }
+}
+
+void DBManager::removeSubscription(const std::string& instrumentId) {
+    if (connStr_.empty()) return;
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::work w(c);
+        w.exec_params("DELETE FROM tb_subscriptions WHERE instrument_id = $1", instrumentId);
+        w.commit();
+        std::cout << "[DB] Removed subscription: " << instrumentId << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] Remove Sub Error: " << e.what() << std::endl;
+    }
+}
+
 void DBManager::saveInstrument(const InstrumentData& data) {
     std::lock_guard<std::mutex> lock(queueMutex_);
     if (tasks_.size() > 5000) return; // 防止积压
@@ -136,7 +162,7 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
             // 完整的 Upsert，包含所有费率字段
             txn.exec_params(
                 "INSERT INTO tb_instruments ("
-                "instrument_id, exchange_id, product_id, underlying_instr_id, strike_price, "
+                "instrument_id, instrument_name, exchange_id, product_id, underlying_instr_id, strike_price, "
                 "volume_multiple, price_tick, "
                 "long_margin_ratio_by_money, long_margin_ratio_by_volume, "
                 "short_margin_ratio_by_money, short_margin_ratio_by_volume, "
@@ -145,21 +171,21 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
                 "close_today_ratio_by_money, close_today_ratio_by_volume, "
                 "last_update_timestamp"
                 ") VALUES ("
-                "$1, $2, $3, $4, $5, "
-                "$6, $7, "
-                "$8, $9, $10, $11, "
-                "$12, $13, $14, $15, $16, $17, NOW()"
+                "$1, $2, $3, $4, $5, $6, "
+                "$7, $8, "
+                "$9, $10, $11, $12, "
+                "$13, $14, $15, $16, $17, $18, NOW()"
                 ") ON CONFLICT (instrument_id) DO UPDATE SET "
-                "product_id=$3, underlying_instr_id=$4, strike_price=$5, "
-                "volume_multiple=$6, price_tick=$7, "
-                "long_margin_ratio_by_money=$8, long_margin_ratio_by_volume=$9, "
-                "short_margin_ratio_by_money=$10, short_margin_ratio_by_volume=$11, "
-                "open_ratio_by_money=$12, open_ratio_by_volume=$13, "
-                "close_ratio_by_money=$14, close_ratio_by_volume=$15, "
-                "close_today_ratio_by_money=$16, close_today_ratio_by_volume=$17,"
+                "instrument_name=$2, exchange_id=$3, product_id=$4, underlying_instr_id=$5, strike_price=$6, "
+                "volume_multiple=$7, price_tick=$8, "
+                "long_margin_ratio_by_money=$9, long_margin_ratio_by_volume=$10, "
+                "short_margin_ratio_by_money=$11, short_margin_ratio_by_volume=$12, "
+                "open_ratio_by_money=$13, open_ratio_by_volume=$14, "
+                "close_ratio_by_money=$15, close_ratio_by_volume=$16, "
+                "close_today_ratio_by_money=$17, close_today_ratio_by_volume=$18,"
                 "last_update_timestamp=NOW()",
                 
-                d.instrument_id, d.exchange_id, d.product_id, d.underlying_instr_id, d.strike_price,
+                d.instrument_id, d.instrument_name, d.exchange_id, d.product_id, d.underlying_instr_id, d.strike_price,
                 d.volume_multiple, d.price_tick,
                 d.long_margin_ratio_by_money, d.long_margin_ratio_by_volume,
                 d.short_margin_ratio_by_money, d.short_margin_ratio_by_volume,

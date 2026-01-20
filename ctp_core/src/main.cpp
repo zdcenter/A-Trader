@@ -103,8 +103,7 @@ int main() {
             if (id.empty()) return "{\"status\":\"error\",\"msg\":\"Empty ID\"}";
             
             md_handler.subscribe(id);
-            // 订阅行情后，顺便查一下合约信息，并放入队列查费率
-            td_handler.qryInstrument(id);
+            // 订阅行情后，放入队列查费率 (queryLoop 会自动先查 Instrument，再查费率，且自带去重)
             td_handler.queueRateQuery(id);
             return "{\"status\":\"ok\",\"msg\":\"Subscribed\"}";
         }
@@ -133,6 +132,7 @@ int main() {
             // 2. 推送当前 Core 内存中已有的持仓和合约信息
             // 这样新连接的 QT 客户端能立刻获得数据，而不需要经过 CTP 的慢速查询
             td_handler.pushCachedPositions();
+            td_handler.pushCachedInstruments();
             
             return "{\"status\":\"ok\",\"msg\":\"Sync started\"}";
         }

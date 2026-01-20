@@ -50,6 +50,10 @@ public:
 
     // 同步读取订阅列表 (用于启动时加载)
     std::vector<std::string> loadSubscriptions();
+    
+    // 对订阅表及其增删改查 (同步操作)
+    void addSubscription(const std::string& instrumentId);
+    void removeSubscription(const std::string& instrumentId);
 
     void saveInstrument(const InstrumentData& data);
     void saveOrder(const CThostFtdcOrderField* pOrder);

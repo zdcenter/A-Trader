@@ -133,7 +133,23 @@ Item {
                 })
                 orderController.sendCommand(subscribeCmd)
             }
-            console.log("✅ 订阅恢复完成")
+            if (marketModel) {
+                marketModel.setInstrumentOrder(instruments);
+            }
+            
+            // 自动选中第一个合约
+            if (instruments.length > 0) {
+                var firstId = instruments[0]
+                if (orderController) orderController.instrumentId = firstId
+                
+                // 高亮选中行
+                var s = {}
+                s[firstId] = true
+                root.selectedSet = s
+                console.log("🎯 已默认选中:", firstId)
+            }
+            
+            console.log("✅ 订阅恢复完成并已重排")
         } catch (e) {
             console.log("⚠️ 恢复订阅列表失败:", e)
         }

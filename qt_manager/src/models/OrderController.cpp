@@ -1,5 +1,6 @@
 #include "models/OrderController.h"
 #include <QDebug>
+#include <cstring>
 
 namespace atrad {
 
@@ -13,12 +14,15 @@ void OrderController::onTick(const QString& json) {
     
     try {
         auto j = nlohmann::json::parse(json.toStdString());
-        std::string id = j["id"];
+        
+        std::string id;
+        if (j.contains("instrument_id")) id = j["instrument_id"];
+        else if (j.contains("id")) id = j["id"];
+        
         if (id == _instrumentId.toStdString()) {
             double lastPrice = 0.0;
-            if (j.contains("price")) lastPrice = j["price"];
-            else if (j.contains("last_price")) lastPrice = j["last_price"];
-            else if (j.contains("lp")) lastPrice = j["lp"];
+            if (j.contains("last_price")) lastPrice = j["last_price"];
+            else if (j.contains("price")) lastPrice = j["price"]; // compat
             
             if (lastPrice > 0.0001 && std::abs(_price - lastPrice) > 0.0001) {
                 _price = lastPrice;
@@ -31,18 +35,35 @@ void OrderController::onTick(const QString& json) {
             
             // Bid 1-5
             for(int i=1; i<=5; ++i) {
-               std::string pKey = "b" + std::to_string(i);
-               std::string vKey = "bv" + std::to_string(i);
-               if (j.contains(pKey)) _bidPrices.append(j[pKey].get<double>()); else _bidPrices.append(0.0);
-               if (j.contains(vKey)) _bidVolumes.append(j[vKey].get<int>()); else _bidVolumes.append(0);
+               std::string pKey = "bid_price" + std::to_string(i);
+               std::string vKey = "bid_volume" + std::to_string(i);
+               // compat
+               std::string oldP = "b" + std::to_string(i);
+               std::string oldV = "bv" + std::to_string(i);
+
+               if (j.contains(pKey)) _bidPrices.append(j[pKey].get<double>());
+               else if (j.contains(oldP)) _bidPrices.append(j[oldP].get<double>());
+               else _bidPrices.append(0.0);
+
+               if (j.contains(vKey)) _bidVolumes.append(j[vKey].get<int>());
+               else if (j.contains(oldV)) _bidVolumes.append(j[oldV].get<int>());
+               else _bidVolumes.append(0);
             }
 
             // Ask 1-5
             for(int i=1; i<=5; ++i) {
-               std::string pKey = "a" + std::to_string(i);
-               std::string vKey = "av" + std::to_string(i);
-               if (j.contains(pKey)) _askPrices.append(j[pKey].get<double>()); else _askPrices.append(0.0);
-               if (j.contains(vKey)) _askVolumes.append(j[vKey].get<int>()); else _askVolumes.append(0);
+               std::string pKey = "ask_price" + std::to_string(i);
+               std::string vKey = "ask_volume" + std::to_string(i);
+               std::string oldP = "a" + std::to_string(i);
+               std::string oldV = "av" + std::to_string(i);
+
+               if (j.contains(pKey)) _askPrices.append(j[pKey].get<double>());
+               else if (j.contains(oldP)) _askPrices.append(j[oldP].get<double>());
+               else _askPrices.append(0.0);
+
+               if (j.contains(vKey)) _askVolumes.append(j[vKey].get<int>());
+               else if (j.contains(oldV)) _askVolumes.append(j[oldV].get<int>());
+               else _askVolumes.append(0);
             }
             
             emit marketDataChanged();
@@ -53,26 +74,56 @@ void OrderController::onTick(const QString& json) {
 void OrderController::updateInstrument(const QString& json) {
     try {
         auto j = nlohmann::json::parse(json.toStdString());
-        QString id = QString::fromStdString(j["id"]);
+        // JSON key is now "instrument_id"
+        // Wait, if json parsing fails on key lookup it throws (operator[]) or return null/default (value)
+        // Better use .value() for safety or verify key exists.
         
-        InstrumentInfo info;
-        // 使用 value() 避免键不存在时抛异常
-        info.multiple = j.value("mult", 1);
-        info.longMarginRatio = j.value("l_m_money", 0.1); // 默认 10% 防止为 0
-        info.shortMarginRatio = j.value("s_m_money", 0.1);
-        info.openRatioByMoney = j.value("o_r_money", 0.0001);
-        info.openRatioByVol = j.value("o_r_vol", 0.0);
+        QString idStr;
+        if (j.contains("instrument_id")) idStr = QString::fromStdString(j["instrument_id"]);
+        else if (j.contains("id")) idStr = QString::fromStdString(j["id"]); // fallback compatibility?
         
-        qDebug() << "[OrderController] Instrument Updated:" << id 
-                 << "Mult:" << info.multiple 
-                 << "MarginRatio:" << info.longMarginRatio;
+        if (idStr.isEmpty()) return;
+        
+        InstrumentData info;
+        std::memset(&info, 0, sizeof(info)); 
 
-        _instrument_dict[id] = info;
+        std::string s_id = j.value("instrument_id", "");
+        std::string s_name = j.value("instrument_name", "");
+        std::string s_exch = j.value("exchange_id", "");
+        std::string s_pid = j.value("product_id", "");
         
-        if (id == _instrumentId) {
+        strncpy(info.instrument_id, s_id.c_str(), sizeof(info.instrument_id) - 1);
+        strncpy(info.instrument_name, s_name.c_str(), sizeof(info.instrument_name) - 1);
+        strncpy(info.exchange_id, s_exch.c_str(), sizeof(info.exchange_id) - 1);
+        strncpy(info.product_id, s_pid.c_str(), sizeof(info.product_id) - 1);
+
+        info.volume_multiple = j.value("volume_multiple", 1);
+        info.price_tick = j.value("price_tick", 0.0);
+
+        info.long_margin_ratio_by_money = j.value("long_margin_ratio_by_money", 0.0); 
+        info.short_margin_ratio_by_money = j.value("short_margin_ratio_by_money", 0.0);
+        
+        info.open_ratio_by_money = j.value("open_ratio_by_money", 0.0);
+        info.open_ratio_by_volume = j.value("open_ratio_by_volume", 0.0);
+        
+        qDebug() << "[OrderController] Instrument Updated:" << idStr 
+                 << "Mult:" << info.volume_multiple 
+                 << "MarginRatio:" << info.long_margin_ratio_by_money;
+
+        _instrument_dict[idStr] = info;
+        
+        if (idStr == _instrumentId) {
             recalculate();
+        } else if (!_instrumentId.isEmpty() && _instrument_dict.contains(_instrumentId)) {
+            // 如果更新的是当前合约的 ProductID (例如当前是 p2605，收到 p 的更新)，也需要重算
+            if (idStr == QString::fromUtf8(_instrument_dict[_instrumentId].product_id)) {
+                qDebug() << "[OrderController] Product ID updated (" << idStr << "), recalculating for " << _instrumentId;
+                recalculate();
+            }
         }
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        qDebug() << "[OrderController] JSON Parse Error:" << e.what();
+    }
 }
 
 void OrderController::recalculate() {
@@ -83,17 +134,42 @@ void OrderController::recalculate() {
         return;
     }
 
-    const auto& info = _instrument_dict[_instrumentId];
+    auto info = _instrument_dict[_instrumentId];
     
-    // 1. 计算预估保证金 = 价格 * 数量 * 乘数 * 保证金率
-    // 简单起见，这里假设是多头保证金率
-    _estimatedMargin = _price * _volume * info.multiple * info.longMarginRatio;
+    QString pid = QString::fromUtf8(info.product_id);
+    bool hasProduct = !pid.isEmpty() && _instrument_dict.contains(pid);
 
-    // 2. 计算预估手续费
-    if (info.openRatioByMoney > 0) {
-        _estimatedCommission = _price * _volume * info.multiple * info.openRatioByMoney;
+    // 1. 独立降级策略：保证金
+    if (info.long_margin_ratio_by_money < 0.0000001 && info.long_margin_ratio_by_volume < 0.0000001) {
+        if (hasProduct) {
+             const auto& pInfo = _instrument_dict[pid];
+             if (pInfo.long_margin_ratio_by_money > 0) info.long_margin_ratio_by_money = pInfo.long_margin_ratio_by_money;
+             if (pInfo.long_margin_ratio_by_volume > 0) info.long_margin_ratio_by_volume = pInfo.long_margin_ratio_by_volume;
+        }
+    }
+
+    // 2. 独立降级策略：手续费
+    if (info.open_ratio_by_money < 0.0000001 && info.open_ratio_by_volume < 0.0000001) {
+        if (hasProduct) {
+            const auto& pInfo = _instrument_dict[pid];
+            if (pInfo.open_ratio_by_money > 0) info.open_ratio_by_money = pInfo.open_ratio_by_money;
+            if (pInfo.open_ratio_by_volume > 0) info.open_ratio_by_volume = pInfo.open_ratio_by_volume;
+        }
+    }
+    
+    // 3. 计算预估保证金 (优先按金额，其次按手数)
+    if (info.long_margin_ratio_by_money > 0) {
+        _estimatedMargin = _price * _volume * info.volume_multiple * info.long_margin_ratio_by_money;
     } else {
-        _estimatedCommission = _volume * info.openRatioByVol;
+        // 按手数: 通常是 "每手多少元"，不需要乘合约乘数
+        _estimatedMargin = _volume * info.long_margin_ratio_by_volume; 
+    }
+
+    // 4. 计算预估手续费
+    if (info.open_ratio_by_money > 0) {
+        _estimatedCommission = _price * _volume * info.volume_multiple * info.open_ratio_by_money;
+    } else {
+        _estimatedCommission = _volume * info.open_ratio_by_volume;
     }
 
     emit calculationChanged();

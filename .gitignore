@@ -10,14 +10,22 @@
 /build/
 build/
 bin/
+# General binary ignores
 *.o
 *.obj
-*.so
 *.a
-*.lib
-*.dll
-*.dylib
 *.exe
+
+# Shared libraries (default ignore)
+*.so
+*.dll
+*.lib
+*.dylib
+
+# Exceptions: Allow CTP libs in shared/
+!shared/**/*.so
+!shared/**/*.dll
+!shared/**/*.lib
 
 # --- C++ / CMake ---
 CMakeCache.txt

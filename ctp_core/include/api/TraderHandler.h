@@ -101,6 +101,9 @@ private:
 public:
     // 推送所有缓存的持仓和资金
     void pushCachedPositions();
+    
+    // 推送缓存的所有合约信息（用于前端重连）
+    void pushCachedInstruments();
 };
 
 } // namespace atrad

@@ -158,6 +158,14 @@ void TraderHandler::pushCachedPositions() {
     }
 }
 
+void TraderHandler::pushCachedInstruments() {
+    if (instrument_cache_.empty()) return;
+    std::cout << "[Td] Pushing cached instruments (" << instrument_cache_.size() << ")..." << std::endl;
+    for (const auto& [id, data] : instrument_cache_) {
+        pub_.publishInstrument(data);
+    }
+}
+
 void TraderHandler::qryPosition() {
     CThostFtdcQryInvestorPositionField req;
     std::memset(&req, 0, sizeof(req));
@@ -184,10 +192,9 @@ void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pP
         pub_.publishPosition(data);
         
         // 查出持仓后，开启合约信息查询链
-        // 优化：只有当未缓存该合约信息时才去查，避免每次刷新持仓都狂查合约
+        // 优化：将查询任务放入队列，避免此处直接调用导致流控或阻塞 CTP 线程
         if (instrument_cache_.find(pPos->InstrumentID) == instrument_cache_.end()) {
-             std::this_thread::sleep_for(std::chrono::milliseconds(200));
-             qryInstrument(pPos->InstrumentID);
+             queueRateQuery(pPos->InstrumentID);
         }
     }
 
@@ -214,6 +221,10 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
         InstrumentData& data = instrument_cache_[pInstrument->InstrumentID];
         std::strncpy(data.instrument_id, pInstrument->InstrumentID, sizeof(data.instrument_id));
         std::strncpy(data.exchange_id, pInstrument->ExchangeID, sizeof(data.exchange_id));
+        
+        // 记得加上 InstrumentName!
+        std::strncpy(data.instrument_name, pInstrument->InstrumentName, sizeof(data.instrument_name));
+        
         std::strncpy(data.product_id, pInstrument->ProductID, sizeof(data.product_id));
         std::strncpy(data.underlying_instr_id, pInstrument->UnderlyingInstrID, sizeof(data.underlying_instr_id));
         data.strike_price = pInstrument->StrikePrice;
@@ -221,13 +232,11 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
         data.volume_multiple = pInstrument->VolumeMultiple;
         data.price_tick = pInstrument->PriceTick;
         
-        // 1. 先发布基础信息 (Mult, Tick) 以便前端立刻可用
-        pub_.publishInstrument(data);
-        DBManager::instance().saveInstrument(data);
+        // 1. 保存到数据库 (全量保存)
+        // DBManager::instance().saveInstrument(data);
 
-        // 如果是订阅的合约（或高优逻辑），应在 subscription 表加载时就 request 了。
-        // 这里如果是全市场查询，我们不再对每个合约都查费率，以免阻塞。
-        // 只有持仓或用户订阅的才去查。
+        // 2. 直接推送到前端 (不再需要白名单，因为我们只查关注的)
+        pub_.publishInstrument(data);
     }
 }
 
@@ -252,9 +261,9 @@ void TraderHandler::OnRspQryInstrumentMarginRate(CThostFtdcInstrumentMarginRateF
         data.short_margin_ratio_by_money = pMargin->ShortMarginRatioByMoney;
         data.short_margin_ratio_by_volume = pMargin->ShortMarginRatioByVolume;
         
-        // 收到 Margin，推送一次
-        pub_.publishInstrument(data);
-        DBManager::instance().saveInstrument(data);
+        // 收到 Margin，仅更新缓存，不急着推送，等 Comm 一起推
+        // pub_.publishInstrument(data);
+        // DBManager::instance().saveInstrument(data);
     } else {
         std::cerr << "[Td Error] Margin Resp is NULL or Error" << std::endl;
     }
@@ -284,7 +293,7 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
         
         // 收到 Comm，推送一次
         pub_.publishInstrument(data);
-        DBManager::instance().saveInstrument(data);
+// DBManager::instance().saveInstrument(data);
     } else {
         std::cerr << "[Td Error] Comm Resp is NULL or Error" << std::endl;
     }
@@ -423,21 +432,48 @@ void TraderHandler::OnErrRtnOrderInsert(CThostFtdcInputOrderField *pInput, CThos
 }
 
 
+/**
+ * @brief 将合约加入费率查询队列 (线程安全)
+ * 
+ * 功能说明:
+ * 1. 白名单管理: 自动将该合约加入 instrument_whitelist_，确保后续 OnRspQryInstrument 收到该合约信息时
+ *    会推送给前端（因为我们只关心订阅或持有持仓的合约）。
+ * 2. 队列管理: 将合约ID放入高优先级队列 high_priority_queue_。
+ * 3. 去重: 使用 queried_set_ 确保同一个 Session 内不重复查询同一合约的费率，避免浪费请求资源。
+ * 4. 唤醒: 通知后台 queryLoop 线程开始工作。
+ */
 void TraderHandler::queueRateQuery(const std::string& instrumentID) {
     if (instrumentID.empty()) return;
     std::lock_guard<std::mutex> lock(queue_mtx_);
+    
+    // 自动加入白名单：已移除，现在只要查就说明关注
+    // instrument_whitelist_.insert(instrumentID);
+
     if (queried_set_.find(instrumentID) == queried_set_.end()) {
         high_priority_queue_.push_back(instrumentID);
         queried_set_.insert(instrumentID);
+        // 唤醒工作线程
         queue_cv_.notify_one();
     }
 }
 
+/**
+ * @brief 费率查询工作线程循环
+ * 
+ * 功能说明:
+ * 1. 负责从队列中取出合约ID。
+ * 2. 执行 CTP 费率查询 (保证金率 & 手续费率)。
+ * 3. 核心作用: 【流控 (Rate Limiting)】。
+ *    CTP 对查询请求（特别是费率查询）有严格的每秒请求数限制（通常 1次/秒）。
+ *    如果并发大量查询（如启动时查几十个订阅合约），CTP 前置机可能会直接断开连接或报错。
+ *    因此，这里必须串行执行，并在每次查询之间强制 sleep 1.1秒以上。
+ */
 void TraderHandler::queryLoop() {
     while (running_) {
         std::string iid;
         {
             std::unique_lock<std::mutex> lock(queue_mtx_);
+            // 等待直到队列不为空 或 线程停止
             queue_cv_.wait(lock, [this]() {
                 return !running_ || !high_priority_queue_.empty() || !low_priority_queue_.empty();
             });
@@ -454,15 +490,19 @@ void TraderHandler::queryLoop() {
         }
 
         if (!iid.empty()) {
-            // CTP 限流: 每秒 1-2 次
-            // 先查 Margin
+            // CTP 限流: 每秒 1 次请求安全
+            
+            // 1. 先查基础信息 (VolumeMultiple, ProductID 等)
+            qryInstrument(iid);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+
+            // 2. 查保证金率
             qryMarginRate(iid);
-            // 查 Commission
-            // 注意: 不能立即并发发，必须串行且间隔
-            std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+            
+            // 3. 查手续费率
             qryCommissionRate(iid);
-            // 下一次循环前再 sleep，确保两次循环之间也有间隔
-            std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1200));
         }
     }
 }
