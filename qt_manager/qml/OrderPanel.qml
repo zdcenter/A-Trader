@@ -198,7 +198,7 @@ Rectangle {
                 
                 // 价格输入
                 Column {
-                    Layout.fillWidth: true
+                    Layout.preferredWidth: 140 // 限制宽度，不再铺满
                     spacing: 4
                     
                     Text {
@@ -207,48 +207,124 @@ Rectangle {
                         font.pixelSize: 11
                     }
                     
-                    TextField {
-                        id: priceInput
+                    RowLayout {
                         width: parent.width
                         height: 36
-                        text: {
-                            if (!orderController) return ""
-                            return orderController.price > 0 ? orderController.price.toString() : ""
-                        }
-                        placeholderText: "跟价中..."
-                        font.pixelSize: 16
-                        font.family: "Consolas"
-                        horizontalAlignment: Text.AlignLeft
+                        spacing: 2
                         
-                        onTextEdited: {
-                            if (!orderController) return
-                            var val = parseFloat(text)
-                            if (!isNaN(val)) {
-                                orderController.setPriceOriginal(val)
-                                orderController.setManualPrice(true)
+                        TextField {
+                            id: priceInput
+                            Layout.fillWidth: true
+                            height: 36
+                            text: {
+                                if (!orderController) return ""
+                                return orderController.price > 0 ? orderController.price.toString() : ""
+                            }
+                            placeholderText: "跟价中..."
+                            font.pixelSize: 16
+                            font.family: "Consolas"
+                            horizontalAlignment: Text.AlignRight
+                            leftPadding: 10
+                            rightPadding: 10
+                            
+                            onTextEdited: {
+                                if (!orderController) return
+                                var val = parseFloat(text)
+                                if (!isNaN(val)) {
+                                    orderController.setPriceOriginal(val)
+                                    orderController.setManualPrice(true)
+                                }
+                            }
+                            
+                            background: Rectangle {
+                                color: "#2a2a2a"
+                                radius: 4
+                                border.color: {
+                                    if (!orderController) return "#444444"
+                                    return orderController.isAutoPrice ? "#4caf50" : "#444444"
+                                }
+                                border.width: 1
+                            }
+                            
+                            color: {
+                                if (!orderController) return "white"
+                                return orderController.isAutoPrice ? "#4caf50" : "white"
                             }
                         }
                         
-                        background: Rectangle {
-                            color: "#2a2a2a"
-                            radius: 4
-                            border.color: {
-                                if (!orderController) return "#444444"
-                                return orderController.isAutoPrice ? "#4caf50" : "#444444"
+                        // 垂直微调按钮 (上下箭头)
+                        Column {
+                            Layout.preferredWidth: 24
+                            Layout.fillHeight: true
+                            spacing: 0
+                            
+                            // 上箭头 (加价)
+                            Rectangle {
+                                width: 24
+                                height: 18
+                                color: priceUpArea.containsMouse ? "#444444" : "#333333"
+                                radius: 2
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▴"
+                                    color: "#cccccc"
+                                    font.pixelSize: 14
+                                }
+                                
+                                MouseArea {
+                                    id: priceUpArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (orderController) {
+                                            var tick = orderController.priceTick
+                                            var p = orderController.price + tick
+                                            p = Math.round(p / tick) * tick
+                                            orderController.setPriceOriginal(Number(p.toFixed(4)))
+                                            orderController.setManualPrice(true)
+                                        }
+                                    }
+                                }
                             }
-                            border.width: 1
-                        }
-                        
-                        color: {
-                            if (!orderController) return "white"
-                            return orderController.isAutoPrice ? "#4caf50" : "white"
+                            
+                            // 下箭头 (降价)
+                            Rectangle {
+                                width: 24
+                                height: 18
+                                color: priceDownArea.containsMouse ? "#444444" : "#333333"
+                                radius: 2
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▾"
+                                    color: "#cccccc"
+                                    font.pixelSize: 14
+                                }
+                                
+                                MouseArea {
+                                    id: priceDownArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (orderController) {
+                                            var tick = orderController.priceTick
+                                            var p = orderController.price - tick
+                                            if (p < 0) p = 0
+                                            p = Math.round(p / tick) * tick
+                                            orderController.setPriceOriginal(Number(p.toFixed(4)))
+                                            orderController.setManualPrice(true)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 
                 // 数量输入
                 Column {
-                    Layout.preferredWidth: 110
+                    Layout.preferredWidth: 100 // 保持合适宽度
                     spacing: 4
                     
                     Text {
@@ -260,33 +336,7 @@ Rectangle {
                     RowLayout {
                         width: parent.width
                         height: 36
-                        spacing: 0
-                        
-                        // 减按钮
-                        Rectangle {
-                            width: 28
-                            height: 36
-                            color: volumeMinusArea.containsMouse ? "#444444" : "#333333"
-                            radius: 4
-                            
-                            Text {
-                                anchors.centerIn: parent
-                                text: "−"
-                                color: "#cccccc"
-                                font.pixelSize: 18
-                            }
-                            
-                            MouseArea {
-                                id: volumeMinusArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: {
-                                    if (orderController && orderController.volume > 1) {
-                                        orderController.volume--
-                                    }
-                                }
-                            }
-                        }
+                        spacing: 2
                         
                         // 数量显示/输入
                         TextField {
@@ -296,46 +346,79 @@ Rectangle {
                             font.pixelSize: 16
                             font.family: "Consolas"
                             font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
+                            horizontalAlignment: Text.AlignRight
+                            leftPadding: 10
+                            rightPadding: 10
                             validator: IntValidator { bottom: 1; top: 9999 }
                             
                             onTextEdited: {
-                                if (!orderController) return
-                                var val = parseInt(text)
-                                if (!isNaN(val) && val > 0) {
-                                    orderController.volume = val
+                                var v = parseInt(text)
+                                if (!isNaN(v) && v > 0 && orderController) {
+                                    orderController.volume = v
                                 }
                             }
                             
                             background: Rectangle {
                                 color: "#2a2a2a"
+                                radius: 4
                                 border.color: "#444444"
                                 border.width: 1
                             }
                             color: "white"
                         }
-                        
-                        // 加按钮
-                        Rectangle {
-                            width: 28
-                            height: 36
-                            color: volumePlusArea.containsMouse ? "#444444" : "#333333"
-                            radius: 4
+
+                        // 垂直微调按钮 (上下箭头)
+                        Column {
+                            Layout.preferredWidth: 24
+                            Layout.fillHeight: true
+                            spacing: 0
                             
-                            Text {
-                                anchors.centerIn: parent
-                                text: "+"
-                                color: "#cccccc"
-                                font.pixelSize: 18
+                            // 上箭头 (加量)
+                            Rectangle {
+                                width: 24
+                                height: 18
+                                color: volUpArea.containsMouse ? "#444444" : "#333333"
+                                radius: 2
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▴"
+                                    color: "#cccccc"
+                                    font.pixelSize: 14
+                                }
+                                
+                                MouseArea {
+                                    id: volUpArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (orderController) orderController.volume++
+                                    }
+                                }
                             }
                             
-                            MouseArea {
-                                id: volumePlusArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: {
-                                    if (orderController) {
-                                        orderController.volume++
+                            // 下箭头 (减量)
+                            Rectangle {
+                                width: 24
+                                height: 18
+                                color: volDownArea.containsMouse ? "#444444" : "#333333"
+                                radius: 2
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▾"
+                                    color: "#cccccc"
+                                    font.pixelSize: 14
+                                }
+                                
+                                MouseArea {
+                                    id: volDownArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (orderController && orderController.volume > 1) {
+                                            orderController.volume--
+                                        }
                                     }
                                 }
                             }
@@ -345,140 +428,168 @@ Rectangle {
             }
         }
         
-        // 预估信息 (保证金 + 手续费)
+        // 下单按钮区域 (仿快期布局)
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            rowSpacing: 10
+            columnSpacing: 10
+            
+            // --- 第一行：开仓 ---
+            Button {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 45
+                text: "买开仓 (多)"
+                
+                background: Rectangle {
+                    color: parent.enabled ? "#f44336" : "#555555" // 红 or 灰
+                    radius: 4
+                }
+                contentItem: Text {
+                    text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: if(orderController) orderController.sendOrder("BUY", "OPEN")
+            }
+            
+            Button {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 45
+                text: "卖开仓 (空)"
+                
+                background: Rectangle {
+                    color: parent.enabled ? "#4caf50" : "#555555" // 绿 or 灰
+                    radius: 4
+                }
+                contentItem: Text {
+                    text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: if(orderController) orderController.sendOrder("SELL", "OPEN")
+            }
+            
+            // --- 第二行：平仓 (平昨/智能平仓) ---
+            Button {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 45
+                text: "买平仓 (空平)"
+                enabled: orderController ? orderController.shortPosition > 0 : false
+                
+                background: Rectangle {
+                    color: parent.enabled ? "#d32f2f" : "#555555" // 深红 or 灰
+                    radius: 4
+                }
+                contentItem: Text {
+                    text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: if(orderController) orderController.sendOrder("BUY", "CLOSE")
+            }
+            
+            Button {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 45
+                text: "卖平仓 (多平)"
+                enabled: orderController ? orderController.longPosition > 0 : false
+                
+                background: Rectangle {
+                    color: parent.enabled ? "#388e3c" : "#555555" // 深绿 or 灰
+                    radius: 4
+                }
+                contentItem: Text {
+                    text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: if(orderController) orderController.sendOrder("SELL", "CLOSE")
+            }
+            
+            // --- 第三行：平今仓 (上期所专用) ---
+            Button {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                text: "买平今"
+                enabled: orderController ? orderController.shortTd > 0 : false
+                
+                background: Rectangle {
+                    color: parent.enabled ? "#b71c1c" : "#555555" // 暗红 or 灰
+                    radius: 4
+                    border.color: parent.enabled ? "#ff8a80" : "transparent"; border.width: 1
+                }
+                contentItem: Text {
+                    text: parent.text; color: parent.enabled ? "#ffcdd2" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: if(orderController) orderController.sendOrder("BUY", "CLOSETODAY")
+            }
+            
+            Button {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                text: "卖平今"
+                enabled: orderController ? orderController.longTd > 0 : false
+                
+                background: Rectangle {
+                    color: parent.enabled ? "#1b5e20" : "#555555" // 暗绿 or 灰
+                    radius: 4
+                    border.color: parent.enabled ? "#a5d6a7" : "transparent"; border.width: 1
+                }
+                contentItem: Text {
+                    text: parent.text; color: parent.enabled ? "#c8e6c9" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: if(orderController) orderController.sendOrder("SELL", "CLOSETODAY")
+            }
+        }
+        
+        // 资金信息显示区域 (预估保证金/手续费)
         Rectangle {
             Layout.fillWidth: true
-            height: 50
+            Layout.preferredHeight: 60
             color: "#1e1e1e"
             radius: 4
             border.color: "#333333"
             
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
                 
-                // 保证金
-                Column {
-                    spacing: 2
-                    Layout.preferredWidth: parent.width / 2 - 10
+                // 预估保证金 (左侧对齐)
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 0
                     
-                    Text {
+                    Text { 
                         text: "预估保证金"
-                        color: "#aaaaaa"
-                        font.pixelSize: 11
-                        width: parent.width
-                        horizontalAlignment: Text.AlignLeft
+                        color: "#888888"
+                        font.pixelSize: 12
                     }
                     
-                    Text {
-                        text: {
-                            if (!orderController) return "¥ 0"
-                            return "¥ " + orderController.estimatedMargin.toFixed(0)
-                        }
-                        color: "#ce9178"
-                        font.bold: true
+                    Text { 
+                        text: "¥ " + (orderController ? orderController.estimatedMargin.toFixed(0) : "0")
+                        color: "#eaa46e" // 金色
+                        font.pixelSize: 18
                         font.family: "Consolas"
-                        font.pixelSize: 15
-                        width: parent.width
-                        horizontalAlignment: Text.AlignLeft
+                        font.bold: true 
                     }
                 }
                 
-                // 手续费
-                Column {
-                    spacing: 2
-                    Layout.preferredWidth: parent.width / 2 - 10
+                Item { Layout.fillWidth: true } // 弹簧占位符
+                
+                // 预估手续费 (右侧对齐)
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                    spacing: 0
                     
-                    Text {
+                    Text { 
+                        Layout.alignment: Qt.AlignRight
                         text: "预估手续费"
-                        color: "#aaaaaa"
-                        font.pixelSize: 11
-                        width: parent.width
-                        horizontalAlignment: Text.AlignRight
+                        color: "#888888" 
+                        font.pixelSize: 12 
                     }
                     
-                    Text {
-                        text: {
-                            if (!orderController) return "¥ 0.00"
-                            return "¥ " + orderController.estimatedCommission.toFixed(2)
-                        }
-                        color: "#dcdcaa"
-                        font.bold: true
+                    Text { 
+                        Layout.alignment: Qt.AlignRight
+                        text: "¥ " + (orderController ? orderController.estimatedCommission.toFixed(2) : "0.00")
+                        color: "#f0f0f0" // 亮白
+                        font.pixelSize: 18
                         font.family: "Consolas"
-                        font.pixelSize: 15
-                        width: parent.width
-                        horizontalAlignment: Text.AlignRight
+                        font.bold: true 
                     }
-                }
-            }
-        }
-        
-        // 买开 + 卖开按钮
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            
-            Button {
-                Layout.fillWidth: true
-                height: 45
-                text: "买开 (BUY)"
-                
-                background: Rectangle {
-                    color: "#f44336"
-                    radius: 4
-                }
-                
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.bold: true
-                }
-                
-                onClicked: {
-                    if (orderController) {
-                        orderController.sendOrder("BUY", "OPEN")
-                    }
-                }
-            }
-            
-            Button {
-                Layout.fillWidth: true
-                height: 45
-                text: "卖开 (SELL)"
-                
-                background: Rectangle {
-                    color: "#4caf50"
-                    radius: 4
-                }
-                
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.bold: true
-                }
-                
-                onClicked: {
-                    if (orderController) {
-                        orderController.sendOrder("SELL", "OPEN")
-                    }
-                }
-            }
-        }
-        
-        // 平仓按钮
-        Button {
-            Layout.fillWidth: true
-            height: 40
-            text: "平仓 (CLOSE)"
-            
-            onClicked: {
-                if (orderController) {
-                    orderController.sendOrder("SELL", "CLOSE")
                 }
             }
         }

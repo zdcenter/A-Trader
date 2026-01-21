@@ -25,6 +25,8 @@ void ZmqWorker::process() {
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::POSITION_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ACCOUNT_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::INSTRUMENT_DATA);
+        _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ORDER_DATA);
+        _subscriber.set(zmq::sockopt::subscribe, zmq_topics::TRADE_DATA);
         
         _running = true;
         qDebug() << "[ZmqWorker] Connected and Subscribed to all topics";
@@ -46,15 +48,15 @@ void ZmqWorker::process() {
             QCoreApplication::processEvents();
             
             // Poll 100ms
-            zmq::poll(items, 1, 100);
+            zmq::poll(items, 1, std::chrono::milliseconds(100));
 
             if (items[0].revents & ZMQ_POLLIN) {
                 zmq::message_t topic_msg;
                 zmq::message_t payload_msg;
                 
                 // 非阻塞接收 (因为 pollin 已经触发)
-                _subscriber.recv(topic_msg, zmq::recv_flags::none);
-                _subscriber.recv(payload_msg, zmq::recv_flags::none);
+                (void)_subscriber.recv(topic_msg, zmq::recv_flags::none);
+                (void)_subscriber.recv(payload_msg, zmq::recv_flags::none);
                 
                 std::string topic = std::string(static_cast<char*>(topic_msg.data()), topic_msg.size());
                 QString payload = QString::fromUtf8(static_cast<char*>(payload_msg.data()), payload_msg.size());
@@ -71,6 +73,10 @@ void ZmqWorker::process() {
                     ctpStatus = true;
                 } else if (topic == zmq_topics::INSTRUMENT_DATA) {
                     emit instrumentReceived(payload);
+                } else if (topic == zmq_topics::ORDER_DATA) {
+                    emit orderReceived(payload);
+                } else if (topic == zmq_topics::TRADE_DATA) {
+                    emit tradeReceived(payload);
                 }
             }
             
@@ -140,6 +146,7 @@ void ZmqWorker::sendCommand(const QString& json) {
         // 设置超时，避免因为 Core 没开而导致 UI 线程阻塞
         requester.set(zmq::sockopt::sndtimeo, 2000);
         requester.set(zmq::sockopt::rcvtimeo, 2000);
+        requester.set(zmq::sockopt::linger, 0); // 立即丢弃未发送数据，防止 close 时阻塞
 
         std::string payload = json.toStdString();
         requester.send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);

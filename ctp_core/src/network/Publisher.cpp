@@ -122,4 +122,51 @@ void Publisher::publishInstrument(const InstrumentData& data) {
     publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
 }
 
+void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
+    if (!pOrder) return;
+    nlohmann::json j;
+    j["instrument_id"] = pOrder->InstrumentID;
+    j["order_sys_id"] = pOrder->OrderSysID; // 报单编号
+    j["order_ref"] = pOrder->OrderRef;      // 报单引用
+    j["front_id"] = pOrder->FrontID;
+    j["session_id"] = pOrder->SessionID;
+    
+    j["direction"] = std::string(1, pOrder->Direction); // 买卖方向
+    j["comb_offset_flag"] = std::string(1, pOrder->CombOffsetFlag[0]); // 开平标志
+    
+    j["limit_price"] = pOrder->LimitPrice;
+    j["volume_total_original"] = pOrder->VolumeTotalOriginal;
+    j["volume_traded"] = pOrder->VolumeTraded;
+    j["volume_total"] = pOrder->VolumeTotal; // 剩余数量
+    
+    j["order_status"] = std::string(1, pOrder->OrderStatus); // 报单状态
+    j["status_msg"] = pOrder->StatusMsg; // 状态信息
+    
+    j["insert_time"] = pOrder->InsertTime;
+    
+    std::string payload = j.dump();
+    publisher_->send(zmq::message_t(zmq_topics::ORDER_DATA, 2), zmq::send_flags::sndmore);
+    publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
+}
+
+void Publisher::publishTrade(const CThostFtdcTradeField* pTrade) {
+    if (!pTrade) return;
+    nlohmann::json j;
+    j["instrument_id"] = pTrade->InstrumentID;
+    j["trade_id"] = pTrade->TradeID;
+    j["order_sys_id"] = pTrade->OrderSysID;
+    
+    j["direction"] = std::string(1, pTrade->Direction);
+    j["offset_flag"] = std::string(1, pTrade->OffsetFlag);
+    
+    j["price"] = pTrade->Price;
+    j["volume"] = pTrade->Volume;
+    j["trade_time"] = pTrade->TradeTime;
+    j["trade_date"] = pTrade->TradeDate;
+    
+    std::string payload = j.dump();
+    publisher_->send(zmq::message_t(zmq_topics::TRADE_DATA, 2), zmq::send_flags::sndmore);
+    publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
+}
+
 } // namespace atrad

@@ -85,21 +85,23 @@ void DBManager::saveInstrument(const InstrumentData& data) {
     cv_.notify_one();
 }
 
-void DBManager::saveOrder(const CThostFtdcOrderField* pOrder) {
+void DBManager::saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id) {
     if (!pOrder) return;
     std::lock_guard<std::mutex> lock(queueMutex_);
     DBTask task;
     task.type = DBTaskType::ORDER;
+    task.strategy_id = strategy_id;
     std::memcpy(&task.order, pOrder, sizeof(CThostFtdcOrderField));
     tasks_.push(task);
     cv_.notify_one();
 }
 
-void DBManager::saveTrade(const CThostFtdcTradeField* pTrade) {
+void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id) {
     if (!pTrade) return;
     std::lock_guard<std::mutex> lock(queueMutex_);
     DBTask task;
     task.type = DBTaskType::TRADE;
+    task.strategy_id = strategy_id;
     std::memcpy(&task.trade, pTrade, sizeof(CThostFtdcTradeField));
     tasks_.push(task);
     cv_.notify_one();
@@ -202,17 +204,19 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
             std::string offset(1, o.CombOffsetFlag[0]);
             std::string status(1, o.OrderStatus);
             
-            txn.exec_params("INSERT INTO tb_orders (front_id, session_id, order_ref, instrument_id, exchange_id, limit_price, volume_total_original, direction, offset_flag, order_status, status_msg, insert_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (front_id, session_id, order_ref) DO UPDATE SET order_status=$10, status_msg=$11, volume_traded=tb_orders.volume_traded",
+            // Added strategy_id at param $13
+            txn.exec_params("INSERT INTO tb_orders (front_id, session_id, order_ref, instrument_id, exchange_id, limit_price, volume_total_original, direction, offset_flag, order_status, status_msg, insert_time, strategy_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (front_id, session_id, order_ref) DO UPDATE SET order_status=$10, status_msg=$11, volume_traded=tb_orders.volume_traded, strategy_id=$13",
                 o.FrontID, o.SessionID, o.OrderRef, o.InstrumentID, o.ExchangeID, o.LimitPrice, o.VolumeTotalOriginal, 
-                dir, offset, status, o.StatusMsg, o.InsertTime);
+                dir, offset, status, o.StatusMsg, o.InsertTime, task.strategy_id);
         }
         else if (task.type == DBTaskType::TRADE) {
             const auto& t = task.trade;
             std::string dir(1, t.Direction);
             std::string offset(1, t.OffsetFlag);
             
-            txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
-                 t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime);
+            // Added strategy_id at param $10
+            txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time, strategy_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
+                 t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime, task.strategy_id);
         }
     } catch (const std::exception& e) {
         std::cerr << "[DB] Insert Error: " << e.what() << std::endl;

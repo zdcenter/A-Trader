@@ -12,6 +12,8 @@ static constexpr const char* MARKET_DATA = "MT"; // Market Tick
 static constexpr const char* POSITION_DATA = "PT"; // Position Tick
 static constexpr const char* ACCOUNT_DATA = "AT"; // Account Tick
 static constexpr const char* INSTRUMENT_DATA = "IT"; // Instrument Tick
+static constexpr const char* ORDER_DATA = "OT"; // Order Update
+static constexpr const char* TRADE_DATA = "TT"; // Trade Update
 static constexpr const char* COMMAND     = "CM"; // Command
 
 // 交易回报广播 (PUB/SUB)

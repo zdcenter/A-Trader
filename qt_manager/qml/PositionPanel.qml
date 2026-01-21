@@ -43,41 +43,12 @@ Item {
             Row {
                 anchors.fill: parent
                 
-                Text {
-                    width: parent.width * 0.15
-                    text: "合约"
-                    color: "#aaaaaa"
-                    horizontalAlignment: Text.AlignHCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    width: parent.width * 0.1
-                    text: "方向"
-                    color: "#aaaaaa"
-                    horizontalAlignment: Text.AlignHCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    width: parent.width * 0.15
-                    text: "数量"
-                    color: "#aaaaaa"
-                    horizontalAlignment: Text.AlignHCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    width: parent.width * 0.25
-                    text: "盈亏"
-                    color: "#aaaaaa"
-                    horizontalAlignment: Text.AlignHCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    width: parent.width * 0.35
-                    text: "成本/现价"
-                    color: "#aaaaaa"
-                    horizontalAlignment: Text.AlignHCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                }
+                Text { width: parent.width * 0.15; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.08; text: "方向"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.22; text: "总/昨/今"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.15; text: "持仓均价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.15; text: "现价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.25; text: "持仓盈亏"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
             }
         }
         
@@ -120,7 +91,7 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.1
+                        width: parent.width * 0.08
                         height: 40
                         text: model.direction
                         color: model.direction === "BUY" ? "#f44336" : "#4caf50"
@@ -128,10 +99,26 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
+                        width: parent.width * 0.22
+                        height: 40
+                        text: model.position + " / " + model.ydPosition + " / " + model.todayPosition
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    Text {
                         width: parent.width * 0.15
                         height: 40
-                        text: model.position
+                        text: model.avgPrice
                         color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    Text {
+                        width: parent.width * 0.15
+                        height: 40
+                        text: model.lastPrice.toFixed(2)
+                        color: "#aaaaaa"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -141,14 +128,6 @@ Item {
                         text: model.profit
                         color: parseFloat(model.profit) >= 0 ? "#f44336" : "#4caf50"
                         font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    Text {
-                        width: parent.width * 0.35
-                        height: 40
-                        text: model.cost.toFixed(2) + " / " + model.lastPrice.toFixed(2)
-                        color: "#aaaaaa"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -164,6 +143,8 @@ Item {
                             
                             // 确保已订阅行情，否则价格不会动
                             orderController.subscribe(model.instrumentId)
+                            // 自动填入本次持仓的手数
+                            orderController.volume = model.position
                         }
                     }
                 }

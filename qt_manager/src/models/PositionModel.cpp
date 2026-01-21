@@ -27,6 +27,19 @@ QVariant PositionModel::data(const QModelIndex &index, int role) const {
         case CostRole: return item.data.position_cost;
         case ProfitRole: return QString::number(item.profit, 'f', 2);
         case LastPriceRole: return item.lastPrice;
+        case AvgPriceRole: {
+             double multiplier = 10.0;
+             if (_instrument_dict.contains(item.instrumentId)) {
+                 multiplier = _instrument_dict[item.instrumentId].volume_multiple;
+                 if (multiplier < 1) multiplier = 10.0; 
+             } else {
+                 if (item.instrumentId.startsWith("rb")) multiplier = 10.0;
+             }
+             if (item.data.position > 0) {
+                return QString::number(item.data.position_cost / (item.data.position * multiplier), 'f', 2);
+             }
+             return "0.00";
+        }
         default: return QVariant();
     }
 }
@@ -41,6 +54,7 @@ QHash<int, QByteArray> PositionModel::roleNames() const {
     roles[CostRole] = "cost";
     roles[ProfitRole] = "profit";
     roles[LastPriceRole] = "lastPrice";
+    roles[AvgPriceRole] = "avgPrice";
     return roles;
 }
 

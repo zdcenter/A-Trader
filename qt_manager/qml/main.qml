@@ -70,7 +70,7 @@ ApplicationWindow {
             accountId: "SIM-207611"
         }
 
-        Rectangle { Layout.fillWidth: true; height: 1; color: "#333333" }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#333333" }
 
         // 2. 主内容区域：使用 SplitView 支持大小调整
         SplitView {
@@ -111,14 +111,93 @@ ApplicationWindow {
 
                 }
 
-                // 持仓面板
-                PositionPanel {
+                // 底部多标签页区域 (持仓 | 委托 | 成交)
+                ColumnLayout {
                     SplitView.fillWidth: true
                     SplitView.fillHeight: true
                     SplitView.minimumHeight: 150
-                    
-                    positionModel: AppPositionModel
-                    orderController: AppOrderController
+                    spacing: 0
+
+                    // 标签栏
+                    TabBar {
+                        id: bottomTabBar
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        
+                        background: Rectangle { color: "#252526" }
+
+                        TabButton {
+                            text: "持仓 (Positions)"
+                            width: implicitWidth + 20
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: parent.checked ? "white" : "#888888"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                color: parent.checked ? "#1e1e1e" : "#2d2d30"
+                                Rectangle { width: parent.width; height: 2; color: "#007acc"; anchors.bottom: parent.bottom; visible: parent.parent.checked }
+                            }
+                        }
+                        
+                        TabButton {
+                            text: "委托 (Orders)"
+                            width: implicitWidth + 20
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: parent.checked ? "white" : "#888888"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                color: parent.checked ? "#1e1e1e" : "#2d2d30"
+                                Rectangle { width: parent.width; height: 2; color: "#007acc"; anchors.bottom: parent.bottom; visible: parent.parent.checked }
+                            }
+                        }
+                        
+                        TabButton {
+                            text: "成交 (Trades)"
+                            width: implicitWidth + 20
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: parent.checked ? "white" : "#888888"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                color: parent.checked ? "#1e1e1e" : "#2d2d30"
+                                Rectangle { width: parent.width; height: 2; color: "#007acc"; anchors.bottom: parent.bottom; visible: parent.parent.checked }
+                            }
+                        }
+                    }
+
+                    // 内容区：StackLayout
+                    StackLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        currentIndex: bottomTabBar.currentIndex
+                        
+                        // 1. 持仓面板
+                        PositionPanel {
+                            positionModel: AppPositionModel
+                            orderController: AppOrderController
+                        }
+                        
+                        // 2. 报单列表面板
+                        OrderListPanel {
+                            orderModel: AppOrderModel
+                            orderController: AppOrderController
+                        }
+
+                        // 3. 成交列表面板
+                        TradeListPanel {
+                            tradeModel: AppTradeModel
+                        }
+                    }
                 }
             }
 
@@ -136,10 +215,11 @@ ApplicationWindow {
         }
         
         // 状态栏
+        // Status bar
         Rectangle {
             id: statusBar
             Layout.fillWidth: true
-            height: 24
+            Layout.preferredHeight: 24
             color: "#007acc"
             
             // 直接绑定到 Controller 属性 (自动更新)

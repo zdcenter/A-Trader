@@ -5,5 +5,7 @@
         <file>MarketQuotePanel.qml</file>
         <file>PositionPanel.qml</file>
         <file>OrderPanel.qml</file>
+        <file>OrderListPanel.qml</file>
+        <file>TradeListPanel.qml</file>
     </qresource>
 </RCC>

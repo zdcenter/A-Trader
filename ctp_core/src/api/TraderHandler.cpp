@@ -275,15 +275,51 @@ void TraderHandler::qryCommissionRate(const std::string& instrument_id) {
     std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
     std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
     std::strncpy(req.InstrumentID, instrument_id.c_str(), sizeof(req.InstrumentID));
-    td_api_->ReqQryInstrumentCommissionRate(&req, 0);
+    
+    int req_id = next_req_id_++;
+    {
+        std::lock_guard<std::mutex> lock(req_mtx_);
+        request_map_[req_id] = instrument_id;
+    }
+    
+    td_api_->ReqQryInstrumentCommissionRate(&req, req_id);
 }
 
 void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommissionRateField *pComm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    std::string requested_iid;
+    {
+        std::lock_guard<std::mutex> lock(req_mtx_);
+        if (request_map_.find(nRequestID) != request_map_.end()) {
+            requested_iid = request_map_[nRequestID];
+            // Don't erase yet if bIsLast is false, but usually QryCommission is 1-shot.
+            if (bIsLast) request_map_.erase(nRequestID);
+        }
+    }
+
     if (pComm) {
+        // 关键修复：CTP 有时会返回品种代码 (如 "rb") 而不是合约代码 ("rb2605")。
+        // 我们必须优先使用我们请求时记录的具体合约代码 ("rb2605") 来更新缓存，
+        // 否则前端找不到 rb2605 的费率数据。
+        std::string target_id = requested_iid;
+        
+        // 如果没办法匹配到请求ID，才回退到使用返回的ID
+        if (target_id.empty()) target_id = pComm->InstrumentID;
+
+        if (target_id.empty()) {
+             std::cerr << "[Td Error] Unknown InstrumentID for Commission Rate" << std::endl;
+             return;
+        }
+
         std::cout << "[Td Debug] Comm Resp: " << pComm->InstrumentID 
+                  << " (Mapped to: " << target_id << ")"
                   << " OpenMoney:" << pComm->OpenRatioByMoney << std::endl;
 
-        InstrumentData& data = instrument_cache_[pComm->InstrumentID];
+        InstrumentData& data = instrument_cache_[target_id];
+        // 如果 target_id 和 requested_iid 不一致（或者是纯新增），确保 instrument_id 字段也被正确填充
+        if (std::strlen(data.instrument_id) == 0) {
+             std::strncpy(data.instrument_id, target_id.c_str(), sizeof(data.instrument_id) - 1);
+        }
+
         data.open_ratio_by_money = pComm->OpenRatioByMoney;
         data.open_ratio_by_volume = pComm->OpenRatioByVolume;
         data.close_ratio_by_money = pComm->CloseRatioByMoney;
@@ -293,7 +329,6 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
         
         // 收到 Comm，推送一次
         pub_.publishInstrument(data);
-// DBManager::instance().saveInstrument(data);
     } else {
         std::cerr << "[Td Error] Comm Resp is NULL or Error" << std::endl;
     }
@@ -325,11 +360,11 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
 void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
     if (pOrder) {
         std::cout << "[Td] Order Update: " << pOrder->OrderSysID << " Status: " << pOrder->OrderStatus << std::endl;
-        pub_.publishAccount(account_cache_); // Just to refresh state? No, maybe publish Order?
-                                             // Publisher doesn't support Order publish yet? User didn't ask for it.
-                                             // User asked for "using postgresql... to SAVE info"
         
-        // 保存到数据库
+        // 1. 推送给前端
+        pub_.publishOrder(pOrder);
+        
+        // 2. 保存到数据库
         DBManager::instance().saveOrder(pOrder);
     }
 }
@@ -338,7 +373,10 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
     if (pTrade) {
         std::cout << "[Td] Trade Update: " << pTrade->TradeID << " Price: " << pTrade->Price << std::endl;
         
-        // 保存到数据库
+        // 1. 推送给前端
+        pub_.publishTrade(pTrade);
+
+        // 2. 保存到数据库
         DBManager::instance().saveTrade(pTrade);
     }
     

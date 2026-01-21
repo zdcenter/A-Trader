@@ -22,6 +22,8 @@ class OrderController : public QObject {
     
     Q_PROPERTY(bool isAutoPrice READ isAutoPrice WRITE setAutoPrice NOTIFY orderParamsChanged)
     Q_PROPERTY(bool isTestMode READ isTestMode WRITE setTestMode NOTIFY orderParamsChanged)
+    
+    Q_PROPERTY(double priceTick READ priceTick NOTIFY orderParamsChanged)
 
     Q_PROPERTY(QVariantList bidPrices READ bidPrices NOTIFY marketDataChanged)
     Q_PROPERTY(QVariantList bidVolumes READ bidVolumes NOTIFY marketDataChanged)
@@ -32,6 +34,14 @@ class OrderController : public QObject {
     Q_PROPERTY(bool coreConnected READ coreConnected NOTIFY connectionChanged)
     Q_PROPERTY(bool ctpConnected READ ctpConnected NOTIFY connectionChanged)
 
+    // Current Instrument Position
+    Q_PROPERTY(int longPosition READ longPosition NOTIFY positionChanged)
+    Q_PROPERTY(int shortPosition READ shortPosition NOTIFY positionChanged)
+    Q_PROPERTY(int longYd READ longYd NOTIFY positionChanged)
+    Q_PROPERTY(int shortYd READ shortYd NOTIFY positionChanged)
+    Q_PROPERTY(int longTd READ longTd NOTIFY positionChanged)
+    Q_PROPERTY(int shortTd READ shortTd NOTIFY positionChanged)
+
 public:
     explicit OrderController(QObject *parent = nullptr);
 
@@ -40,6 +50,7 @@ public:
         if(_instrumentId != id) { 
             _instrumentId = id; 
             _isManualPrice = false; 
+            updateCurrentPos(id);
             emit orderParamsChanged(); 
         } 
     }
@@ -49,6 +60,12 @@ public:
 
     int volume() const { return _volume; }
     void setVolume(int v) { if(_volume != v) { _volume = v; emit orderParamsChanged(); } }
+
+    double priceTick() const { 
+        if(_instrumentId.isEmpty() || !_instrument_dict.contains(_instrumentId)) return 1.0;
+        double t = _instrument_dict[_instrumentId].price_tick;
+        return (t < 1e-6) ? 1.0 : t;
+    }
 
     double estimatedMargin() const { return _estimatedMargin; }
     double estimatedCommission() const { return _estimatedCommission; }
@@ -81,6 +98,7 @@ public slots:
 
     // 由 ZmqWorker 调用
     void updateConnectionStatus(bool core, bool ctp);
+    void onPositionReceived(const QString& json);
 
     // QML 调用此方法发送指令 (中转到 Worker)
     Q_INVOKABLE void sendCommand(const QString& cmd);
@@ -91,9 +109,11 @@ signals:
     void marketDataChanged();
     void connectionChanged();
     void orderSent(const QString& json); 
+    void positionChanged();
 
 private:
     void recalculate();
+    void updateCurrentPos(const QString& id);
     
     QString _instrumentId;
     double _price = 0.0;
@@ -110,6 +130,24 @@ private:
     QVariantList _bidPrices, _bidVolumes, _askPrices, _askVolumes;
     
     QHash<QString, InstrumentData> _instrument_dict;
+
+    struct PosSummary {
+        int longTotal = 0;
+        int longYd = 0;
+        int longTd = 0;
+        int shortTotal = 0;
+        int shortYd = 0;
+        int shortTd = 0;
+    };
+    QHash<QString, PosSummary> _pos_cache;
+    PosSummary _currentPos;
+
+    int longPosition() const { return _currentPos.longTotal; }
+    int shortPosition() const { return _currentPos.shortTotal; }
+    int longYd() const { return _currentPos.longYd; }
+    int shortYd() const { return _currentPos.shortYd; }
+    int longTd() const { return _currentPos.longTd; }
+    int shortTd() const { return _currentPos.shortTd; }
 };
 
 } // namespace atrad

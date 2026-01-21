@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS tb_orders (
     volume_total INT, -- remaining
     order_status CHAR(1), -- 'a' Unknown, '0' AllTraded, '5' Canceled...
     status_msg VARCHAR(256),
+    strategy_id VARCHAR(32), -- 策略ID，用于区分不同策略的单子
     user_id VARCHAR(16),
     broker_id VARCHAR(16),
     insert_date VARCHAR(9),
@@ -97,9 +98,42 @@ CREATE TABLE IF NOT EXISTS tb_trades (
     trade_time VARCHAR(9),
     trade_type CHAR(1),
     price_source CHAR(1),
+    strategy_id VARCHAR(32), -- 策略ID
     user_id VARCHAR(16),
     broker_id VARCHAR(16),
     
     id SERIAL PRIMARY KEY,
     CONSTRAINT uniq_trade UNIQUE (exchange_id, trade_id, direction) -- TradeID is unique within Exchange? Usually yes.
 );
+
+-- Strategies Table (策略配置表)
+-- 设计思路：使用 JSONB 存储差异化的策略参数，满足网格、突破、条件单等多种需求
+CREATE TABLE IF NOT EXISTS tb_strategies (
+    strategy_id VARCHAR(32) PRIMARY KEY,
+    strategy_name VARCHAR(64) NOT NULL,
+    
+    -- 策略类型: 'CONDITION'(条件单), 'GRID'(网格), 'BREAKOUT'(突破), 'CTA'(趋势)
+    strategy_type VARCHAR(32) NOT NULL,
+    
+    -- 标的合约 (如果是跨品种套利，可存主合约或置空在 params 中指定)
+    instrument_id VARCHAR(32),
+    exchange_id VARCHAR(16),
+    
+    -- 核心参数区 (JSONB):
+    -- 1. 条件单: { "trigger_price": 3600, "condition": ">=", "action": "Buy", "volume": 1 }
+    -- 2. 网格: { "upper_price": 4000, "lower_price": 3500, "grid_step": 10, "vol_per_grid": 1 }
+    -- 3. 突破: { "resistance_level": 3800, "support_level": 3400, "lookback_period": 20 }
+    parameters JSONB, 
+    
+    -- 运行状态: 0=Stop(停止), 1=Running(运行), 2=Paused(暂停), 9=Error(异常)
+    status INT DEFAULT 0,
+    status_msg VARCHAR(256), -- 记录最后的状态信息或报错
+    
+    user_id VARCHAR(16),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 索引：方便按用户和类型查询
+CREATE INDEX IF NOT EXISTS idx_strategy_user ON tb_strategies(user_id);
+CREATE INDEX IF NOT EXISTS idx_strategy_type ON tb_strategies(strategy_type);

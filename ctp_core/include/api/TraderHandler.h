@@ -98,6 +98,11 @@ private:
     std::thread query_thread_;
     std::atomic<bool> running_{false};
 
+    // Request ID mapping for async queries
+    std::map<int, std::string> request_map_;
+    std::atomic<int> next_req_id_{1000};
+    std::mutex req_mtx_;
+
 public:
     // 推送所有缓存的持仓和资金
     void pushCachedPositions();

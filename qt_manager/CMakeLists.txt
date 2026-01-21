@@ -51,6 +51,8 @@ add_executable(${PROJECT_NAME}
     src/models/PositionModel.cpp
     src/models/AccountInfo.cpp
     src/models/OrderController.cpp
+    src/models/OrderModel.cpp
+    src/models/TradeModel.cpp
     ${RESOURCES}
 )
 

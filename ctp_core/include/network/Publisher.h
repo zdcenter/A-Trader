@@ -1,6 +1,7 @@
 #pragma once
 
 #include "protocol/message_schema.h"
+#include "ThostFtdcUserApiStruct.h"
 #include <zmq.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -38,6 +39,16 @@ public:
      * @brief 发送账户资金数据
      */
     void publishAccount(const AccountData& data);
+
+    /**
+     * @brief 发送报单回报
+     */
+    void publishOrder(const CThostFtdcOrderField* pOrder);
+
+    /**
+     * @brief 发送成交换单
+     */
+    void publishTrade(const CThostFtdcTradeField* pTrade);
 
 private:
     std::unique_ptr<zmq::context_t> context_;

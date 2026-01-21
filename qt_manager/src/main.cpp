@@ -8,6 +8,8 @@
 #include "models/PositionModel.h"
 #include "models/AccountInfo.h"
 #include "models/OrderController.h"
+#include "models/OrderModel.h"
+#include "models/TradeModel.h"
 
 #include <QFont>
 
@@ -30,6 +32,8 @@ int main(int argc, char *argv[]) {
     atrad::PositionModel* positionModel = new atrad::PositionModel(&app);
     atrad::AccountInfo* accountInfo = new atrad::AccountInfo(&app);
     atrad::OrderController* orderController = new atrad::OrderController(&app);
+    atrad::OrderModel* orderModel = new atrad::OrderModel(&app);
+    atrad::TradeModel* tradeModel = new atrad::TradeModel(&app);
 
     qDebug() << "[Main] Created marketModel:" << marketModel << "rows:" << marketModel->rowCount();
     
@@ -38,7 +42,8 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("AppPositionModel", positionModel);
     engine.rootContext()->setContextProperty("AppAccountInfo", accountInfo);
     engine.rootContext()->setContextProperty("AppOrderController", orderController);
-    // engine.rootContext()->setContextProperty("AppZmqWorker", nullptr); // 占位，稍后设置 worker
+    engine.rootContext()->setContextProperty("AppOrderModel", orderModel);
+    engine.rootContext()->setContextProperty("AppTradeModel", tradeModel);
     
     qDebug() << "[Main] Set context properties";
 
@@ -47,9 +52,6 @@ int main(int argc, char *argv[]) {
     atrad::ZmqWorker* worker = new atrad::ZmqWorker();
     worker->moveToThread(workerThread);
     
-    // 将 worker 暴露给 QML (已移除，避免异线程访问 crash)
-    // engine.rootContext()->setContextProperty("AppZmqWorker", worker);
-
     // 连接信号
     QObject::connect(workerThread, &QThread::started, worker, &atrad::ZmqWorker::process);
     
@@ -65,6 +67,10 @@ int main(int argc, char *argv[]) {
     QObject::connect(worker, &atrad::ZmqWorker::instrumentReceived, positionModel, &atrad::PositionModel::updateInstrument);
 
     QObject::connect(worker, &atrad::ZmqWorker::instrumentReceived, orderController, &atrad::OrderController::updateInstrument);
+    
+    QObject::connect(worker, &atrad::ZmqWorker::orderReceived, orderModel, &atrad::OrderModel::onOrderReceived);
+    QObject::connect(worker, &atrad::ZmqWorker::tradeReceived, tradeModel, &atrad::TradeModel::onTradeReceived);
+    QObject::connect(worker, &atrad::ZmqWorker::positionReceived, orderController, &atrad::OrderController::onPositionReceived);
     
     // 连接状态更新 (Worker -> OrderController)
     QObject::connect(worker, &atrad::ZmqWorker::statusUpdated, 

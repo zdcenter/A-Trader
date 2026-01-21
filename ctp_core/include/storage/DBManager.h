@@ -29,6 +29,7 @@ enum class DBTaskType {
 
 struct DBTask {
     DBTaskType type;
+    std::string strategy_id; // Added: 策略ID
     // We store copies of data.
     // Use std::variant or simple union or shared_ptr to struct?
     // Let's use specific structs for simplicity.
@@ -56,8 +57,8 @@ public:
     void removeSubscription(const std::string& instrumentId);
 
     void saveInstrument(const InstrumentData& data);
-    void saveOrder(const CThostFtdcOrderField* pOrder);
-    void saveTrade(const CThostFtdcTradeField* pTrade);
+    void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "");
+    void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "");
 
 private:
     DBManager() = default;

@@ -157,20 +157,15 @@ void OrderController::recalculate() {
         }
     }
     
-    // 3. 计算预估保证金 (优先按金额，其次按手数)
-    if (info.long_margin_ratio_by_money > 0) {
-        _estimatedMargin = _price * _volume * info.volume_multiple * info.long_margin_ratio_by_money;
-    } else {
-        // 按手数: 通常是 "每手多少元"，不需要乘合约乘数
-        _estimatedMargin = _volume * info.long_margin_ratio_by_volume; 
-    }
+    // 3. 计算预估保证金 (支持按手数和按金额混合计费)
+    // 公式: (按手数费率 + 按金额费率 * 价格 * 合约乘数) * 手数
+    _estimatedMargin = (info.long_margin_ratio_by_volume + 
+                       info.long_margin_ratio_by_money * _price * info.volume_multiple) * _volume;
 
     // 4. 计算预估手续费
-    if (info.open_ratio_by_money > 0) {
-        _estimatedCommission = _price * _volume * info.volume_multiple * info.open_ratio_by_money;
-    } else {
-        _estimatedCommission = _volume * info.open_ratio_by_volume;
-    }
+    // 公式: (按手数费率 + 按金额费率 * 价格 * 合约乘数) * 手数
+    _estimatedCommission = (info.open_ratio_by_volume + 
+                           info.open_ratio_by_money * _price * info.volume_multiple) * _volume;
 
     emit calculationChanged();
 }
@@ -210,6 +205,64 @@ void OrderController::unsubscribe(const QString& id) {
 }
 
 
+
+void OrderController::onPositionReceived(const QString& json) {
+    try {
+        auto j = nlohmann::json::parse(json.toStdString());
+        QString id;
+        if (j.contains("instrument_id")) id = QString::fromStdString(j["instrument_id"]);
+        
+        if (id.isEmpty()) return;
+
+        char dir = 0;
+        if(j.contains("direction")) {
+            if (j["direction"].is_string()) dir = j["direction"].get<std::string>()[0]; 
+            else dir = (char)j["direction"].get<int>();
+        }
+
+        int pos = 0;
+        if(j.contains("position")) pos = j["position"];
+
+        int td = 0;
+        if(j.contains("today_position")) td = j["today_position"];
+
+        int yd = 0;
+        if(j.contains("yd_position")) yd = j["yd_position"];
+
+        // Update cache
+        if (!_pos_cache.contains(id)) {
+            _pos_cache[id] = PosSummary{};
+        }
+        
+        auto& summary = _pos_cache[id];
+        
+        if (dir == '2' || dir == '0') { // Long
+            summary.longTotal = pos;
+            summary.longTd = td;
+            summary.longYd = yd; 
+        } else { // Short (1 or 3)
+            summary.shortTotal = pos;
+            summary.shortTd = td;
+            summary.shortYd = yd;
+        }
+
+        if (id == _instrumentId) {
+            _currentPos = summary;
+            emit positionChanged();
+        }
+
+    } catch (...) {}
+}
+
+void OrderController::updateCurrentPos(const QString& id) {
+    if (_pos_cache.contains(id)) {
+        _currentPos = _pos_cache[id];
+    } else {
+        _currentPos = PosSummary{};
+    }
+    emit positionChanged();
+}
+
 void OrderController::updateConnectionStatus(bool core, bool ctp) {
     if (_coreConnected != core || _ctpConnected != ctp) {
         _coreConnected = core;
@@ -217,6 +270,7 @@ void OrderController::updateConnectionStatus(bool core, bool ctp) {
         emit connectionChanged();
     }
 }
+
 
 
 void OrderController::sendCommand(const QString& cmd) {

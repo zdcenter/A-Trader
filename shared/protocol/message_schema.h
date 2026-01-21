@@ -135,6 +135,9 @@ struct OrderRequest {
     int volume;                  // 数量
     char direction;              // '0': 买, '1': 卖 (遵循 CTP 习惯或自定义)
     char offset_flag;            // '0': 开仓, '1': 平仓, '3': 平今
+    
+    // Added: 策略ID，用于标识订单来源
+    char strategy_id[32]; 
 };
 
 } // namespace atrad

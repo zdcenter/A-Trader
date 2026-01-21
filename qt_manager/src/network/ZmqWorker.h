@@ -46,6 +46,9 @@ signals:
      * @brief 收到合约属性 JSON 时触发
      */
     void instrumentReceived(const QString& json);
+
+    void orderReceived(const QString& json);
+    void tradeReceived(const QString& json);
     
     /**
      * @brief 状态更新信号
