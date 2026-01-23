@@ -1,3 +1,4 @@
+// qmllint disable import
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -216,8 +217,26 @@ ApplicationWindow {
 
                         // 4. 策略/条件单面板
                         ConditionOrderPanel {
+                            id: conditionOrderPanel
                             marketModel: AppMarketModel
                             orderController: AppOrderController
+                            
+                            // 监听orderController的变化，自动填充合约和价格
+                            Connections {
+                                target: AppOrderController
+                                function onInstrumentIdChanged() {
+                                    if (AppOrderController.instrumentId) {
+                                        conditionOrderPanel.selectedInstrument = AppOrderController.instrumentId
+                                    }
+                                }
+                                
+                                function onPriceChanged() {
+                                    // 当价格变化时，更新selectedLastPrice
+                                    if (AppOrderController.instrumentId === conditionOrderPanel.selectedInstrument && AppOrderController.price > 0) {
+                                        conditionOrderPanel.selectedLastPrice = AppOrderController.price
+                                    }
+                                }
+                            }
                         }
                     }
                 }

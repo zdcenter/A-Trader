@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+pragma ComponentBehavior: Bound
+
 /**
  * 账户信息面板组件
  * 功能：
@@ -10,7 +12,7 @@ import QtQuick.Layouts
  * - 显示 CTP 连接状态
  */
 Rectangle {
-    id: root
+    id: accountRoot
     
     // 对外暴露的属性
     property var accountInfo

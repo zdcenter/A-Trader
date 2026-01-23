@@ -14,37 +14,63 @@ Rectangle {
     property string selectedInstrument: ""
     property real selectedLastPrice: 0.0
     
-    // 监听选中合约变化
-    onSelectedInstrumentChanged: {
-        if (selectedInstrument) {
-            // 自动设置合约选择框
-            var index = -1
-            if (marketModel && marketModel.subscribedInstruments) {
-                for (var i = 0; i < marketModel.subscribedInstruments.length; i++) {
-                    if (marketModel.subscribedInstruments[i] === selectedInstrument) {
-                        index = i
-                        break
+    // 辅助函数：尝试选中合约
+    function selectCurrentInstrument() {
+        if (!selectedInstrument || !root.marketModel) return
+        
+        var target = selectedInstrument.trim()
+        
+        // MarketModel 是 C++ QAbstractListModel，没有 subscribedInstruments 属性
+        // 但提供了 getAllInstruments() 方法返回 QStringList
+        var instruments = root.marketModel.getAllInstruments()
+        
+        if (instruments) {
+            console.log("Debug: 目标合约=" + target + ", 列表长度=" + instruments.length)
+            for (var i = 0; i < instruments.length; i++) {
+                if (instruments[i] == target) {
+                    if (instrumentCombo.currentIndex !== i) {
+                        instrumentCombo.currentIndex = i
+                        console.log("Debug: 成功选中索引:", i, target)
+                    } else {
+                        console.log("Debug: 索引已是正确:", i)
                     }
+                    return
                 }
             }
-            if (index >= 0) {
-                instrumentCombo.currentIndex = index
-            }
-            
-            // 自动填充当前价格到触发价格
-            if (selectedLastPrice > 0) {
-                triggerPriceInput.text = selectedLastPrice.toFixed(2)
-            }
+            console.log("Debug: 列表遍历结束，未找到目标:", target)
+        } else {
+            console.log("Debug: 订阅列表为空")
+        }
+    }
+
+    // 监听选中合约变化
+    onSelectedInstrumentChanged: {
+        selectCurrentInstrument()
+        
+        // 重置触发价格绑定
+        if (selectedLastPrice > 0) {
+             triggerPriceInput.text = Qt.binding(function() { return selectedLastPrice > 0 ? selectedLastPrice.toFixed(2) : "" })
         }
     }
     
-    // 监听价格变化，实时更新触发价格输入框
-    onSelectedLastPriceChanged: {
-        if (selectedInstrument && selectedInstrument === instrumentCombo.displayText) {
-            // 只有当前选中的合约才更新价格
-            if (selectedLastPrice > 0 && triggerPriceInput.text === "") {
-                triggerPriceInput.text = selectedLastPrice.toFixed(2)
-            }
+    // 监听模型变化
+    // MarketModel 是 QAbstractListModel，会自动通知 ComboBox 更新
+    // 我们只需要监听 ComboBox 的 count 变化来触发选中逻辑
+    /*
+    Connections {
+        target: root.marketModel
+        // QAbstractListModel 没有 onSubscribedInstrumentsChanged 信号
+    }
+    */
+    
+    // 监听ComboBox自身变化
+    Connections {
+        target: instrumentCombo
+        function onCountChanged() {
+            selectCurrentInstrument()
+        }
+        function onModelChanged() {
+            selectCurrentInstrument()
         }
     }
     
@@ -85,7 +111,7 @@ Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                         Text {
-                            text: orderController ? orderController.conditionOrderList.filter(function(o) { 
+                            text: root.orderController ? root.orderController.conditionOrderList.filter(function(o) { 
                                 return o.status === 0 
                             }).length : "0"
                             font.pixelSize: 16
@@ -110,7 +136,7 @@ Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                         Text {
-                            text: orderController ? orderController.conditionOrderList.filter(function(o) { 
+                            text: root.orderController ? root.orderController.conditionOrderList.filter(function(o) { 
                                 return o.status === 1 
                             }).length : "0"
                             font.pixelSize: 16
@@ -150,37 +176,81 @@ Rectangle {
                         color: "#ffffff"
                     }
                     
-                    // 合约选择
+                    // 合约与策略选择
                     Column {
                         Layout.fillWidth: true
                         spacing: 6
                         
-                        Text {
-                            text: "合约"
-                            font.pixelSize: 12
-                            font.bold: true
-                            color: "#ffffff"
-                        }
-                        
-                        ComboBox {
-                            id: instrumentCombo
+                        Row {
                             width: parent.width
-                            height: 32
-                            model: marketModel ? marketModel.subscribedInstruments : []
+                            spacing: 12
                             
-                            contentItem: Text {
-                                leftPadding: 15
-                                text: instrumentCombo.displayText
-                                font.pixelSize: 15
-                                color: "#ffffff"
-                                verticalAlignment: Text.AlignVCenter
+                            // 合约部分
+                            Column {
+                                width: (parent.width - 12) * 0.4
+                                spacing: 6
+                                Text {
+                                    text: "合约"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                                ComboBox {
+                                    id: instrumentCombo
+                                    width: parent.width
+                                    height: 32
+                                    model: root.marketModel
+                                    textRole: "instrumentId"
+                                    
+                                    contentItem: Text {
+                                        leftPadding: 15
+                                        text: instrumentCombo.displayText
+                                        font.pixelSize: 15
+                                        color: "#ffffff"
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    
+                                    background: Rectangle {
+                                        color: "#1e1e1e"
+                                        border.color: instrumentCombo.activeFocus ? "#2196f3" : "#555555"
+                                        border.width: 2
+                                        radius: 6
+                                    }
+                                }
                             }
                             
-                            background: Rectangle {
-                                color: "#1e1e1e"
-                                border.color: instrumentCombo.activeFocus ? "#2196f3" : "#555555"
-                                border.width: 2
-                                radius: 6
+                            // 策略部分
+                            Column {
+                                width: (parent.width - 12) * 0.6
+                                spacing: 6
+                                Text {
+                                    text: "策略类型"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "#ffffff"
+                                }
+                                ComboBox {
+                                    id: strategyCombo
+                                    width: parent.width
+                                    height: 32
+                                    model: root.orderController ? root.orderController.strategyList : []
+                                    textRole: "name"
+                                    
+                                    contentItem: Text {
+                                        leftPadding: 15
+                                        text: strategyCombo.displayText
+                                        font.pixelSize: 15
+                                        color: "#ffffff"
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    
+                                    background: Rectangle {
+                                        color: "#1e1e1e"
+                                        border.color: strategyCombo.activeFocus ? "#2196f3" : "#555555"
+                                        border.width: 2
+                                        radius: 6
+                                    }
+                                }
                             }
                         }
                     }
@@ -229,6 +299,7 @@ Rectangle {
                                 id: triggerPriceInput
                                 width: parent.width - 82
                                 height: 32
+                                text: selectedLastPrice > 0 ? selectedLastPrice.toFixed(2) : ""
                                 placeholderText: "触发价格"
                                 placeholderTextColor: "#666666"
                                 font.pixelSize: 15
@@ -240,6 +311,72 @@ Rectangle {
                                     border.color: triggerPriceInput.activeFocus ? "#2196f3" : "#555555"
                                     border.width: 2
                                     radius: 6
+                                }
+                                
+                                // 微调按钮 (仿 OrderPanel 样式)
+                                Column {
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 1
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 24
+                                    height: parent.height - 2
+                                    spacing: 0
+                                    
+                                    // 上调按钮
+                                    Rectangle {
+                                        width: 24
+                                        height: parent.height / 2
+                                        color: priceUpArea.containsMouse ? "#444444" : "#333333"
+                                        radius: 2
+                                        
+                                        Text { 
+                                            text: "▴"
+                                            color: "#cccccc"
+                                            font.pixelSize: 14
+                                            anchors.centerIn: parent 
+                                        }
+                                        
+                                        MouseArea {
+                                            id: priceUpArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                var val = parseFloat(triggerPriceInput.text) || 0
+                                                var tick = (root.orderController && root.orderController.priceTick) ? root.orderController.priceTick : 1.0
+                                                // 精度处理，防止浮点数误差
+                                                var newVal = (Math.round((val + tick) / tick) * tick)
+                                                triggerPriceInput.text = newVal.toFixed(2) // 这会断开绑定
+                                            }
+                                        }
+                                    }
+                                    
+                                    // 下调按钮
+                                    Rectangle {
+                                        width: 24
+                                        height: parent.height / 2
+                                        color: priceDownArea.containsMouse ? "#444444" : "#333333"
+                                        radius: 2
+                                        
+                                        Text { 
+                                            text: "▾"
+                                            color: "#cccccc"
+                                            font.pixelSize: 14
+                                            anchors.centerIn: parent 
+                                        }
+                                        
+                                        MouseArea {
+                                            id: priceDownArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onClicked: {
+                                                var val = parseFloat(triggerPriceInput.text) || 0
+                                                var tick = (root.orderController && root.orderController.priceTick) ? root.orderController.priceTick : 1.0
+                                                var newVal = (Math.round((val - tick) / tick) * tick)
+                                                if(newVal < 0) newVal = 0
+                                                triggerPriceInput.text = newVal.toFixed(2) // 这会断开绑定
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -265,18 +402,18 @@ Rectangle {
                             height: 30
                             
                             indicator: Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 7
+                                width: 24
+                                height: 24
+                                radius: 12
                                 border.color: "#4caf50"
                                 border.width: 2
                                 color: "transparent"
                                 anchors.verticalCenter: parent.verticalCenter
                                 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 14
+                                    height: 14
+                                    radius: 7
                                     anchors.centerIn: parent
                                     color: "#4caf50"
                                     visible: buyRadio.checked
@@ -287,7 +424,7 @@ Rectangle {
                                 text: "买"
                                 font.pixelSize: 13
                                 color: "#ffffff"
-                                leftPadding: 20
+                                leftPadding: 28
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -297,18 +434,18 @@ Rectangle {
                             height: 30
                             
                             indicator: Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 7
+                                width: 24
+                                height: 24
+                                radius: 12
                                 border.color: "#f44336"
                                 border.width: 2
                                 color: "transparent"
                                 anchors.verticalCenter: parent.verticalCenter
                                 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 14
+                                    height: 14
+                                    radius: 7
                                     anchors.centerIn: parent
                                     color: "#f44336"
                                     visible: sellRadio.checked
@@ -319,7 +456,7 @@ Rectangle {
                                 text: "卖"
                                 font.pixelSize: 13
                                 color: "#ffffff"
-                                leftPadding: 20
+                                leftPadding: 28
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -345,18 +482,18 @@ Rectangle {
                             height: 30
                             
                             indicator: Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 7
+                                width: 24
+                                height: 24
+                                radius: 12
                                 border.color: "#ffa726"
                                 border.width: 2
                                 color: "transparent"
                                 anchors.verticalCenter: parent.verticalCenter
                                 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 14
+                                    height: 14
+                                    radius: 7
                                     anchors.centerIn: parent
                                     color: "#ffa726"
                                     visible: openRadio.checked
@@ -367,7 +504,7 @@ Rectangle {
                                 text: "开仓"
                                 font.pixelSize: 13
                                 color: "#ffffff"
-                                leftPadding: 20
+                                leftPadding: 28
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -377,18 +514,18 @@ Rectangle {
                             height: 30
                             
                             indicator: Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 7
+                                width: 24
+                                height: 24
+                                radius: 12
                                 border.color: "#ffa726"
                                 border.width: 2
                                 color: "transparent"
                                 anchors.verticalCenter: parent.verticalCenter
                                 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 14
+                                    height: 14
+                                    radius: 7
                                     anchors.centerIn: parent
                                     color: "#ffa726"
                                     visible: closeRadio.checked
@@ -399,7 +536,7 @@ Rectangle {
                                 text: "平仓"
                                 font.pixelSize: 13
                                 color: "#ffffff"
-                                leftPadding: 20
+                                leftPadding: 28
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -409,18 +546,18 @@ Rectangle {
                             height: 30
                             
                             indicator: Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 7
+                                width: 24
+                                height: 24
+                                radius: 12
                                 border.color: "#ffa726"
                                 border.width: 2
                                 color: "transparent"
                                 anchors.verticalCenter: parent.verticalCenter
                                 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 14
+                                    height: 14
+                                    radius: 7
                                     anchors.centerIn: parent
                                     color: "#ffa726"
                                     visible: closeTodayRadio.checked
@@ -431,7 +568,7 @@ Rectangle {
                                 text: "平今"
                                 font.pixelSize: 13
                                 color: "#ffffff"
-                                leftPadding: 20
+                                leftPadding: 28
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
@@ -460,12 +597,75 @@ Rectangle {
                             font.pixelSize: 15
                             color: "#ffffff"
                             leftPadding: 15
+                            text: "1" // 默认1手
                             
                             background: Rectangle {
                                 color: "#1e1e1e"
                                 border.color: volumeInput.activeFocus ? "#2196f3" : "#555555"
                                 border.width: 2
                                 radius: 6
+                            }
+                            
+                            // 微调按钮 (仿 OrderPanel 样式)
+                            Column {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 24
+                                height: parent.height - 2
+                                spacing: 0
+                                
+                                // 上调按钮
+                                Rectangle {
+                                    width: 24
+                                    height: parent.height / 2
+                                    color: volUpArea.containsMouse ? "#444444" : "#333333"
+                                    radius: 2
+                                    
+                                    Text { 
+                                        text: "▴"
+                                        color: "#cccccc"
+                                        font.pixelSize: 14
+                                        anchors.centerIn: parent 
+                                    }
+                                    
+                                    MouseArea {
+                                        id: volUpArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            var val = parseInt(volumeInput.text) || 0
+                                            volumeInput.text = String(val + 1)
+                                        }
+                                    }
+                                }
+                                
+                                // 下调按钮
+                                Rectangle {
+                                    width: 24
+                                    height: parent.height / 2
+                                    color: volDownArea.containsMouse ? "#444444" : "#333333"
+                                    radius: 2
+                                    
+                                    Text { 
+                                        text: "▾"
+                                        color: "#cccccc"
+                                        font.pixelSize: 14
+                                        anchors.centerIn: parent 
+                                    }
+                                    
+                                    MouseArea {
+                                        id: volDownArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            var val = parseInt(volumeInput.text) || 0
+                                            if (val > 1) {
+                                                volumeInput.text = String(val - 1)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -570,7 +770,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        model: orderController ? orderController.conditionOrderList : null
+                        model: root.orderController ? root.orderController.conditionOrderList : null
                         spacing: 2
                         
                         delegate: Rectangle {

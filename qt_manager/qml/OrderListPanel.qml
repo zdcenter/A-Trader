@@ -20,7 +20,7 @@ Item {
         // 表头
         Rectangle {
             Layout.fillWidth: true
-            height: 30
+            Layout.preferredHeight: 30
             color: "#1e1e1e"
             
             Row {
@@ -44,9 +44,14 @@ Item {
             clip: true
             
             delegate: Rectangle {
-                width: parent.width
+                id: orderDelegate
+                width: ListView.view.width
                 height: 35
                 color: index % 2 === 0 ? "#1e1e1e" : "#252526"
+                
+                // Qt 6 推荐：显式声明 Delegate 属性
+                required property int index
+                required property var model
                 
                 // 辅助函数：状态颜色
                 function getStatusColor(status) {
@@ -84,22 +89,22 @@ Item {
                 Row {
                     anchors.fill: parent
                     
-                    Text { width: parent.width * 0.15; text: model.instrumentId; color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    Text { width: parent.width * 0.10; text: getDirText(model.direction); color: model.direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    Text { width: parent.width * 0.10; text: getOffsetFlagText(model.offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    Text { width: parent.width * 0.15; text: model.price.toFixed(2); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    Text { width: parent.width * 0.15; text: getStatusText(model.status); color: getStatusColor(model.status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    Text { width: parent.width * 0.15; text: model.volumeOriginal + "/" + model.volumeTraded + "/" + (model.volumeOriginal - model.volumeTraded - model.volumeTotal /* rough calc */); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    Text { width: parent.width * 0.20; text: model.orderSysId; color: "#888888"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.15; text: orderDelegate.model.instrumentId; color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.10; text: getDirText(orderDelegate.model.direction); color: orderDelegate.model.direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.10; text: getOffsetFlagText(orderDelegate.model.offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.15; text: orderDelegate.model.price.toFixed(2); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.15; text: getStatusText(orderDelegate.model.status); color: getStatusColor(orderDelegate.model.status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.15; text: orderDelegate.model.volumeOriginal + "/" + orderDelegate.model.volumeTraded + "/" + (orderDelegate.model.volumeOriginal - orderDelegate.model.volumeTraded - (orderDelegate.model.volumeTotal || 0)); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.20; text: orderDelegate.model.orderSysId; color: "#888888"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                 }
 
-                // 点击委托单切换合约，双击撤单 (后续可实现)
+                // 点击委托单切换合约，双击撤单
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        if(orderController) {
-                            orderController.instrumentId = model.instrumentId
-                            orderController.subscribe(model.instrumentId)
+                        if(root.orderController) {
+                            root.orderController.instrumentId = orderDelegate.model.instrumentId
+                            root.orderController.subscribe(orderDelegate.model.instrumentId)
                         }
                     }
                 }
