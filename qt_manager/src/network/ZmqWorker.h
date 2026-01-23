@@ -49,6 +49,7 @@ signals:
 
     void orderReceived(const QString& json);
     void tradeReceived(const QString& json);
+    void conditionOrderReceived(const QString& json); // Added for Strategy Push
     
     /**
      * @brief 状态更新信号

@@ -89,6 +89,8 @@ void MdHandler::OnRtnDepthMarketData(CThostFtdcDepthMarketDataField *pData) {
     // 过滤掉无效数据
     if (pData->LastPrice > 1e12 || pData->LastPrice < 0) return;
 
+    if (tick_callback_) tick_callback_(pData);
+
     TickData tick;
     std::memset(&tick, 0, sizeof(tick));
     

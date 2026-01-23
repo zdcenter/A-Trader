@@ -173,6 +173,22 @@ ApplicationWindow {
                                 Rectangle { width: parent.width; height: 2; color: "#007acc"; anchors.bottom: parent.bottom; visible: parent.parent.checked }
                             }
                         }
+
+                        TabButton {
+                            text: "条件单 (Conditions)"
+                            width: implicitWidth + 20
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: parent.checked ? "white" : "#888888"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                color: parent.checked ? "#1e1e1e" : "#2d2d30"
+                                Rectangle { width: parent.width; height: 2; color: "#007acc"; anchors.bottom: parent.bottom; visible: parent.parent.checked }
+                            }
+                        }
                     }
 
                     // 内容区：StackLayout
@@ -196,6 +212,12 @@ ApplicationWindow {
                         // 3. 成交列表面板
                         TradeListPanel {
                             tradeModel: AppTradeModel
+                        }
+
+                        // 4. 策略/条件单面板
+                        ConditionOrderPanel {
+                            marketModel: AppMarketModel
+                            orderController: AppOrderController
                         }
                     }
                 }

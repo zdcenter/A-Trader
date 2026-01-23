@@ -50,6 +50,11 @@ public:
      */
     void publishTrade(const CThostFtdcTradeField* pTrade);
 
+    /**
+     * @brief 发送通用消息 (Topic + Message)
+     */
+    void publish(const std::string& topic, const std::string& message);
+
 private:
     std::unique_ptr<zmq::context_t> context_;
     std::unique_ptr<zmq::socket_t> publisher_;

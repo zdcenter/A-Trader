@@ -140,4 +140,57 @@ struct OrderRequest {
     char strategy_id[32]; 
 };
 
+// 比较条件类型
+enum class CompareType : int {
+    GreaterThan = 0,        // >
+    GreaterOrEqual = 1,     // >=
+    LessThan = 2,           // <
+    LessOrEqual = 3         // <=
+};
+
+// 条件单结构
+struct ConditionOrderRequest {
+    // 触发条件
+    char instrument_id[64];
+    double trigger_price;
+    CompareType compare_type; 
+
+    // 报单参数
+    char direction;         // CTP direction char
+    char offset_flag;       // CTP offset flag char
+    char price_type;        // '1': Limit, '2': Market (custom mapping)
+    double limit_price;     
+    int tick_offset;        // 相对多少跳
+    int volume;
+    
+    char strategy_id[32];
+    
+    // 状态
+    int status;             // 0: Pending, 1: Triggered, 2: Cancelled
+    uint64_t request_id;    // 唯一ID
+};
+
+namespace CmdType {
+    const std::string ConditionOrderInsert = "req_condition_order_insert";
+    const std::string ConditionOrderCancel = "req_condition_order_cancel";
+    const std::string ConditionOrderModify = "req_condition_order_modify"; // 修改条件单
+    const std::string Order = "ORDER";
+    const std::string Subscribe = "SUBSCRIBE";
+    const std::string Unsubscribe = "UNSUBSCRIBE";
+    const std::string Ping = "PING";
+    const std::string Pong = "PONG";
+    const std::string SyncState = "SYNC_STATE";
+    const std::string ConditionOrderQuery = "req_condition_order_query"; // Added
+    const std::string StrategyQuery = "req_strategy_query"; // Added
+
+    // Returns / Pushes
+    const std::string RtnOrder = "rtn_order";
+    const std::string RtnTrade = "rtn_trade";
+    const std::string RtnPosition = "rtn_position";
+    const std::string RtnAccount = "rtn_account";
+    const std::string RtnInstrument = "rtn_instrument"; // sync
+    const std::string RtnConditionOrder = "rtn_condition_order"; // Added
+    const std::string RtnStrategyList = "rtn_strategy_list"; // Added
+}
+
 } // namespace atrad

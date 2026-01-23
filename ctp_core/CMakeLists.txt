@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
     src/network/CommandServer.cpp
     src/api/MdHandler.cpp
     src/api/TraderHandler.cpp
+    src/strategy/ConditionEngine.cpp # Added
     src/storage/DBManager.cpp # Added
 )
 

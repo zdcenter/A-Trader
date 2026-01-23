@@ -22,6 +22,10 @@ public:
     void unsubscribe(const std::string& instrument);
     void join();
 
+    // Callback for internal strategy engine
+    using TickCallback = std::function<void(const CThostFtdcDepthMarketDataField*)>;
+    void setTickCallback(TickCallback cb) { tick_callback_ = cb; }
+
     // --- SPI 回调 ---
     void OnFrontConnected() override;
     void OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
@@ -37,6 +41,10 @@ private:
     std::string password_;
     std::string md_front_;
     std::set<std::string> contracts_;
+
+    
+    TickCallback tick_callback_; // Added
+
 };
 
 } // namespace atrad

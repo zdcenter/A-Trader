@@ -137,3 +137,27 @@ CREATE TABLE IF NOT EXISTS tb_strategies (
 -- 索引：方便按用户和类型查询
 CREATE INDEX IF NOT EXISTS idx_strategy_user ON tb_strategies(user_id);
 CREATE INDEX IF NOT EXISTS idx_strategy_type ON tb_strategies(strategy_type);
+
+
+-- Condition Orders Table (云端条件单/预埋单表)
+-- Aligning with DBManager.cpp implementation
+CREATE TABLE IF NOT EXISTS tb_condition_orders (
+    request_id BIGINT PRIMARY KEY,
+    
+    instrument_id VARCHAR(32),
+    trigger_price DOUBLE PRECISION,
+    compare_type INT, -- 0: >=, 1: <= (Matches CompareType enum)
+    
+    status INT, -- 0: Pending, 1: Triggered, 2: Canceled
+    
+    direction CHAR(1),
+    offset_flag CHAR(1),
+    volume INT,
+    limit_price DOUBLE PRECISION,
+    
+    strategy_id VARCHAR(32),
+    
+    insert_time TIMESTAMP DEFAULT NOW()
+);
+
+-- CREATE INDEX IF NOT EXISTS idx_cond_status ON tb_condition_orders(status);

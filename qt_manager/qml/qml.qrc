@@ -7,5 +7,6 @@
         <file>OrderPanel.qml</file>
         <file>OrderListPanel.qml</file>
         <file>TradeListPanel.qml</file>
+        <file>ConditionOrderPanel.qml</file>
     </qresource>
 </RCC>

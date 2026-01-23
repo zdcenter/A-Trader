@@ -26,7 +26,10 @@ void ZmqWorker::process() {
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ACCOUNT_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::INSTRUMENT_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ORDER_DATA);
+        _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ORDER_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::TRADE_DATA);
+        // Subscribe to Strategy/Condition updates (defined in atrad namespace)
+        _subscriber.set(zmq::sockopt::subscribe, atrad::TOPIC_STRATEGY);
         
         _running = true;
         qDebug() << "[ZmqWorker] Connected and Subscribed to all topics";
@@ -77,6 +80,8 @@ void ZmqWorker::process() {
                     emit orderReceived(payload);
                 } else if (topic == zmq_topics::TRADE_DATA) {
                     emit tradeReceived(payload);
+                } else if (topic == atrad::TOPIC_STRATEGY) {
+                    emit conditionOrderReceived(payload);
                 }
             }
             

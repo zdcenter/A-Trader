@@ -107,14 +107,141 @@ void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string&
     cv_.notify_one();
 }
 
+void DBManager::saveConditionOrder(const ConditionOrderRequest& order) {
+    std::lock_guard<std::mutex> lock(queueMutex_);
+    DBTask task;
+    task.type = DBTaskType::CONDITION_ORDER;
+    task.condition_order = order;
+    tasks_.push(task);
+    cv_.notify_one();
+}
+
+void DBManager::updateConditionOrderStatus(uint64_t request_id, int status) {
+    if (connStr_.empty()) return;
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::work w(c);
+        w.exec_params("UPDATE tb_condition_orders SET status = $1 WHERE request_id = $2", status, (long long)request_id);
+        w.commit();
+        std::cout << "[DB] Updated Condition Order " << request_id << " to Status " << status << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] Update Order Status Error: " << e.what() << std::endl;
+    }
+}
+
+void DBManager::modifyConditionOrder(uint64_t request_id, double trigger_price, double limit_price, int volume) {
+    if (connStr_.empty()) return;
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::work w(c);
+        // 只允许修改状态为0（待触发）的条件单
+        w.exec_params(
+            "UPDATE tb_condition_orders SET trigger_price = $1, limit_price = $2, volume = $3 "
+            "WHERE request_id = $4 AND status = 0",
+            trigger_price, limit_price, volume, (long long)request_id
+        );
+        w.commit();
+        std::cout << "[DB] Modified Condition Order " << request_id 
+                  << " (trigger=" << trigger_price << ", limit=" << limit_price << ", vol=" << volume << ")" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] Modify Condition Order Error: " << e.what() << std::endl;
+    }
+}
+
+std::vector<ConditionOrderRequest> DBManager::loadConditionOrders(bool onlyActive) {
+    std::vector<ConditionOrderRequest> orders;
+    if (connStr_.empty()) return orders;
+    
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::work txn(c);
+        
+        // Check if table exists first
+        pqxx::result table_check = txn.exec("SELECT to_regclass('public.tb_condition_orders')");
+        if (table_check[0][0].is_null()) return orders;
+
+        std::string sql;
+        if (onlyActive) {
+            // Load only Pending (0)
+            sql = "SELECT instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, request_id, strategy_id "
+                  "FROM tb_condition_orders WHERE status = 0";
+        } else {
+            // Load ALL (Active + History), maybe limit for performance
+            sql = "SELECT instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, request_id, strategy_id "
+                  "FROM tb_condition_orders ORDER BY insert_time DESC LIMIT 100";
+        }
+
+        pqxx::result r = txn.exec(sql);
+        
+        for (auto row : r) {
+            ConditionOrderRequest o;
+            std::memset(&o, 0, sizeof(o));
+            
+            std::string instr = row[0].as<std::string>();
+            std::strncpy(o.instrument_id, instr.c_str(), sizeof(o.instrument_id));
+            
+            o.trigger_price = row[1].as<double>();
+            o.compare_type = static_cast<CompareType>(row[2].as<int>());
+            o.status = row[3].as<int>();
+            
+            std::string dir = row[4].as<std::string>();
+            o.direction = dir.empty() ? '0' : dir[0];
+            
+            std::string off = row[5].as<std::string>();
+            o.offset_flag = off.empty() ? '0' : off[0];
+            
+            o.volume = row[6].as<int>();
+            o.limit_price = row[7].as<double>();
+            o.request_id = row[8].as<long long>();
+
+            if (!row[9].is_null()) {
+                 std::string strat = row[9].as<std::string>();
+                 std::strncpy(o.strategy_id, strat.c_str(), sizeof(o.strategy_id));
+            }
+            
+            // Pending defaults
+            o.price_type = '1'; // Limit
+            
+            orders.push_back(o);
+        }
+        std::cout << "[DB] Loaded " << orders.size() << " pending condition orders." << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] Load Condition Orders Error: " << e.what() << std::endl;
+    }
+    return orders;
+}
+
+std::vector<std::pair<std::string, std::string>> DBManager::loadStrategies() {
+    std::vector<std::pair<std::string, std::string>> strategies;
+    if (connStr_.empty()) return strategies;
+    try {
+        pqxx::connection c(connStr_);
+        // c.set_client_encoding("GB18030"); // Or UTF8 depending on strategy table 
+        // Assuming Strategies have UTF8 or compatible names.
+        
+        pqxx::work txn(c);
+        // Check table
+        pqxx::result table_check = txn.exec("SELECT to_regclass('public.tb_strategies')");
+        if (table_check[0][0].is_null()) return strategies;
+
+        pqxx::result r = txn.exec("SELECT strategy_id, strategy_name FROM tb_strategies WHERE status != 9");
+        for (auto row : r) {
+            std::string id = row[0].as<std::string>();
+            std::string name = row[1].as<std::string>();
+            strategies.push_back({id, name});
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] Load Strategies Error: " << e.what() << std::endl;
+    }
+    return strategies;
+}
+
 void DBManager::workerLoop() {
     while (running_) {
         try {
             if (!conn_ || !conn_->is_open()) {
                 std::cout << "[DB] Connecting to DB Encod=GB18030..." << std::endl;
                 // 添加 client_encoding 参数以支持 CTP 的 GBK 字符
-                // 用户需要在连接字符串中可能已经指定，或者通过 options 指定
-                // 这里我们假设 connStr 足够，或者之后执行 SET
                 conn_ = std::make_unique<pqxx::connection>(connStr_);
                 // 强制设置客户端编码为 GBK (CTP 默认编码)
                 conn_->set_client_encoding("GB18030");
@@ -217,6 +344,19 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
             // Added strategy_id at param $10
             txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time, strategy_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
                  t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime, task.strategy_id);
+        }
+        else if (task.type == DBTaskType::CONDITION_ORDER) {
+            const auto& o = task.condition_order;
+            
+
+            std::string dir(1, o.direction);
+            std::string off(1, o.offset_flag);
+
+            txn.exec_params("INSERT INTO tb_condition_orders (request_id, instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, strategy_id) "
+                            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) "
+                            "ON CONFLICT (request_id) DO UPDATE SET status=$5",
+                            (long long)o.request_id, o.instrument_id, o.trigger_price, (int)o.compare_type, o.status,
+                            dir, off, o.volume, o.limit_price, o.strategy_id);
         }
     } catch (const std::exception& e) {
         std::cerr << "[DB] Insert Error: " << e.what() << std::endl;

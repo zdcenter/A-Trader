@@ -1,5 +1,6 @@
 #include "network/Publisher.h"
 #include "protocol/zmq_topics.h"
+#include "utils/Encoding.h"
 #include <iostream>
 
 namespace atrad {
@@ -97,7 +98,7 @@ void Publisher::publishAccount(const AccountData& data) {
 void Publisher::publishInstrument(const InstrumentData& data) {
     nlohmann::json j;
     j["instrument_id"] = data.instrument_id;
-    j["instrument_name"] = data.instrument_name;
+    j["instrument_name"] = atrad::utils::gbk_to_utf8(data.instrument_name);
     j["exchange_id"] = data.exchange_id;
     j["volume_multiple"] = data.volume_multiple;
     j["price_tick"] = data.price_tick;
@@ -140,7 +141,7 @@ void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
     j["volume_total"] = pOrder->VolumeTotal; // 剩余数量
     
     j["order_status"] = std::string(1, pOrder->OrderStatus); // 报单状态
-    j["status_msg"] = pOrder->StatusMsg; // 状态信息
+    j["status_msg"] = atrad::utils::gbk_to_utf8(pOrder->StatusMsg); // 状态信息
     
     j["insert_time"] = pOrder->InsertTime;
     
@@ -167,6 +168,14 @@ void Publisher::publishTrade(const CThostFtdcTradeField* pTrade) {
     std::string payload = j.dump();
     publisher_->send(zmq::message_t(zmq_topics::TRADE_DATA, 2), zmq::send_flags::sndmore);
     publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
+}
+
+void Publisher::publish(const std::string& topic, const std::string& message) {
+    zmq::message_t t(topic.c_str(), topic.length());
+    zmq::message_t m(message.c_str(), message.length());
+    
+    publisher_->send(t, zmq::send_flags::sndmore);
+    publisher_->send(m, zmq::send_flags::none);
 }
 
 } // namespace atrad

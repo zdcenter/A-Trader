@@ -24,7 +24,8 @@ namespace atrad {
 enum class DBTaskType {
     INSTRUMENT,
     ORDER,
-    TRADE
+    TRADE,
+    CONDITION_ORDER // Added
 };
 
 struct DBTask {
@@ -36,6 +37,7 @@ struct DBTask {
     InstrumentData instr;
     CThostFtdcOrderField order;
     CThostFtdcTradeField trade;
+    ConditionOrderRequest condition_order; // Added
 };
 
 class DBManager {
@@ -59,6 +61,16 @@ public:
     void saveInstrument(const InstrumentData& data);
     void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "");
     void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "");
+    void saveConditionOrder(const ConditionOrderRequest& order); // Added
+
+    // Condition Order State
+    void updateConditionOrderStatus(uint64_t request_id, int status);
+    void modifyConditionOrder(uint64_t request_id, double trigger_price, double limit_price, int volume); // 修改条件单
+    std::vector<ConditionOrderRequest> loadConditionOrders(bool onlyActive = true);
+    
+    // Strategy Management
+    std::vector<std::pair<std::string, std::string>> loadStrategies();
+
 
 private:
     DBManager() = default;

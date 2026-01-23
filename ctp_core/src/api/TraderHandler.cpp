@@ -164,6 +164,17 @@ void TraderHandler::pushCachedInstruments() {
     for (const auto& [id, data] : instrument_cache_) {
         pub_.publishInstrument(data);
     }
+    for (const auto& [id, data] : instrument_cache_) {
+        pub_.publishInstrument(data);
+    }
+}
+
+bool TraderHandler::getInstrumentData(const std::string& id, InstrumentData& out_data) {
+    if (instrument_cache_.find(id) != instrument_cache_.end()) {
+        out_data = instrument_cache_[id];
+        return true;
+    }
+    return false;
 }
 
 void TraderHandler::qryPosition() {
@@ -334,7 +345,7 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
     }
 }
 
-int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset) {
+int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id) {
     CThostFtdcInputOrderField req;
     std::memset(&req, 0, sizeof(req));
     std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
@@ -354,6 +365,13 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
     req.ForceCloseReason = THOST_FTDC_FCC_NotForceClose;
     req.IsAutoSuspend = 0;
     req.UserForceClose = 0;
+    
+    // 存储 OrderRef 到 strategy_id 的映射
+    if (!strategy_id.empty()) {
+        std::lock_guard<std::mutex> lock(order_strategy_mtx_);
+        order_strategy_map_[ref] = strategy_id;
+    }
+    
     return td_api_->ReqOrderInsert(&req, 0);
 }
 
@@ -361,11 +379,21 @@ void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
     if (pOrder) {
         std::cout << "[Td] Order Update: " << pOrder->OrderSysID << " Status: " << pOrder->OrderStatus << std::endl;
         
+        // 查找 strategy_id
+        std::string strategy_id;
+        {
+            std::lock_guard<std::mutex> lock(order_strategy_mtx_);
+            auto it = order_strategy_map_.find(pOrder->OrderRef);
+            if (it != order_strategy_map_.end()) {
+                strategy_id = it->second;
+            }
+        }
+        
         // 1. 推送给前端
         pub_.publishOrder(pOrder);
         
-        // 2. 保存到数据库
-        DBManager::instance().saveOrder(pOrder);
+        // 2. 保存到数据库（带 strategy_id）
+        DBManager::instance().saveOrder(pOrder, strategy_id);
     }
 }
 
@@ -373,11 +401,21 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
     if (pTrade) {
         std::cout << "[Td] Trade Update: " << pTrade->TradeID << " Price: " << pTrade->Price << std::endl;
         
+        // 查找 strategy_id
+        std::string strategy_id;
+        {
+            std::lock_guard<std::mutex> lock(order_strategy_mtx_);
+            auto it = order_strategy_map_.find(pTrade->OrderRef);
+            if (it != order_strategy_map_.end()) {
+                strategy_id = it->second;
+            }
+        }
+        
         // 1. 推送给前端
         pub_.publishTrade(pTrade);
 
-        // 2. 保存到数据库
-        DBManager::instance().saveTrade(pTrade);
+        // 2. 保存到数据库（带 strategy_id）
+        DBManager::instance().saveTrade(pTrade, strategy_id);
     }
     
     // 实时更新本地缓存

@@ -8,7 +8,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 寻找 Qt6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Multimedia)
 
 # 探测平台 (同 ctp_core)
 if(WIN32)
@@ -42,7 +42,7 @@ endif()
 find_package(nlohmann_json REQUIRED)
 
 # 资源文件处理
-qt_add_resources(RESOURCES qml/qml.qrc)
+qt_add_resources(RESOURCES qml/qml.qrc resources/resources.qrc)
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
@@ -62,6 +62,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Multimedia
     ${ZMQ_LIBS}
     nlohmann_json::nlohmann_json
 )

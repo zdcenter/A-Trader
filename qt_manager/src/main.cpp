@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
     
     // 连接持仓总盈亏到资金面板
     QObject::connect(positionModel, &atrad::PositionModel::totalProfitChanged, accountInfo, &atrad::AccountInfo::setFloatingProfit);
+    QObject::connect(worker, &atrad::ZmqWorker::conditionOrderReceived, orderController, &atrad::OrderController::onConditionOrderReturn);
     
     QObject::connect(&app, &QGuiApplication::aboutToQuit, worker, &atrad::ZmqWorker::stop);
     QObject::connect(&app, &QGuiApplication::aboutToQuit, workerThread, &QThread::quit);

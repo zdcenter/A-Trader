@@ -41,6 +41,11 @@ class OrderController : public QObject {
     Q_PROPERTY(int shortYd READ shortYd NOTIFY positionChanged)
     Q_PROPERTY(int longTd READ longTd NOTIFY positionChanged)
     Q_PROPERTY(int shortTd READ shortTd NOTIFY positionChanged)
+    
+    // Condition Orders
+    // Condition Orders
+    Q_PROPERTY(QVariantList conditionOrderList READ conditionOrderList NOTIFY conditionOrderListChanged)
+    Q_PROPERTY(QVariantList strategyList READ strategyList NOTIFY strategyListChanged) // Added
 
 public:
     explicit OrderController(QObject *parent = nullptr);
@@ -85,6 +90,9 @@ public:
     
     bool coreConnected() const { return _coreConnected; }
     bool ctpConnected() const { return _ctpConnected; }
+    
+    QVariantList conditionOrderList() const { return _conditionOrderList; }
+    QVariantList strategyList() const { return _strategyList; }
 
 public slots:
     void onTick(const QString& json);
@@ -102,6 +110,17 @@ public slots:
 
     // QML 调用此方法发送指令 (中转到 Worker)
     Q_INVOKABLE void sendCommand(const QString& cmd);
+    
+    // 封装条件单发送
+    Q_INVOKABLE void sendConditionOrder(const QString& dataJson);
+    
+    // Condition Order Management
+    Q_INVOKABLE void cancelConditionOrder(const QString& requestId);
+    void onConditionOrderReturn(const QString& json);
+    void queryConditionOrders(); // Called on startup/reconnect
+    void queryStrategies(); // Query available strategies
+    void modifyConditionOrder(const QString& requestId, double triggerPrice, double limitPrice, int volume); // 修改条件单
+    Q_INVOKABLE double getInstrumentPriceTick(const QString& instrumentId) const; // 获取合约最小变动价位
 
 signals:
     void orderParamsChanged();
@@ -110,6 +129,9 @@ signals:
     void connectionChanged();
     void orderSent(const QString& json); 
     void positionChanged();
+    void conditionOrderListChanged();
+    void strategyListChanged();
+    void conditionOrderSound(const QString& soundType); // "triggered" or "cancelled"
 
 private:
     void recalculate();
@@ -148,6 +170,10 @@ private:
     int shortYd() const { return _currentPos.shortYd; }
     int longTd() const { return _currentPos.longTd; }
     int shortTd() const { return _currentPos.shortTd; }
+    
+    // Condition orders data
+    QVariantList _conditionOrderList;
+    QVariantList _strategyList;
 };
 
 } // namespace atrad

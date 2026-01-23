@@ -35,4 +35,7 @@ inline const char* REP_CMD_ADDR = "tcp://*:5556";
 inline const char* REQ_CMD_ADDR = "tcp://127.0.0.1:5556";
 
 } // namespace zmq_topics
+
+static constexpr const char* TOPIC_STRATEGY = "ST"; // Added for Strategy/Condition updates
+
 } // namespace atrad

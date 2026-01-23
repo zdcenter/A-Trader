@@ -40,7 +40,7 @@ public:
     void qryCommissionRate(const std::string& instrument_id);
 
     // 下单接口
-    int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset);
+    int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id = "");
 
     // --- SPI 回调 ---
     void OnFrontConnected() override;
@@ -102,6 +102,10 @@ private:
     std::map<int, std::string> request_map_;
     std::atomic<int> next_req_id_{1000};
     std::mutex req_mtx_;
+    
+    // Order Ref to Strategy ID mapping
+    std::map<std::string, std::string> order_strategy_map_;
+    std::mutex order_strategy_mtx_;
 
 public:
     // 推送所有缓存的持仓和资金
@@ -109,6 +113,9 @@ public:
     
     // 推送缓存的所有合约信息（用于前端重连）
     void pushCachedInstruments();
+
+    // Helper for Strategy
+    bool getInstrumentData(const std::string& id, InstrumentData& out_data);
 };
 
 } // namespace atrad
