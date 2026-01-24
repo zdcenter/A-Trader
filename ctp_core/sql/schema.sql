@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS tb_instruments (
     close_today_ratio_by_volume DOUBLE PRECISION DEFAULT 0,
 
     -- 记录最后一次更新时间，便于排查数据是否陈旧
-    last_update_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    last_update_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- 交易日: 用于判断当前缓存是否是最新的
+    trading_day VARCHAR(9)
 );
 
 -- Orders Table

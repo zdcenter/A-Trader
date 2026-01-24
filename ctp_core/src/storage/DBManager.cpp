@@ -236,6 +236,69 @@ std::vector<std::pair<std::string, std::string>> DBManager::loadStrategies() {
     return strategies;
 }
 
+std::vector<InstrumentData> DBManager::loadAllInstruments() {
+    std::vector<InstrumentData> instruments;
+    if (connStr_.empty()) return instruments;
+    try {
+        pqxx::connection c(connStr_);
+        c.set_client_encoding("GB18030");
+        pqxx::work txn(c);
+        
+        // Ensure table has trading_day column (handled by schema update, but runtime check keeps it safe-ish)
+        // We just run query.
+        pqxx::result r = txn.exec(
+            "SELECT instrument_id, instrument_name, exchange_id, product_id, underlying_instr_id, "
+            "volume_multiple, price_tick, "
+            "long_margin_ratio_by_money, long_margin_ratio_by_volume, "
+            "short_margin_ratio_by_money, short_margin_ratio_by_volume, "
+            "open_ratio_by_money, open_ratio_by_volume, "
+            "close_ratio_by_money, close_ratio_by_volume, "
+            "close_today_ratio_by_money, close_today_ratio_by_volume, "
+            "strike_price, trading_day "
+            "FROM tb_instruments"
+        );
+        
+        for (auto row : r) {
+            InstrumentData data;
+            std::memset(&data, 0, sizeof(data));
+            
+            std::string s;
+            s = row[0].as<std::string>(); std::strncpy(data.instrument_id, s.c_str(), sizeof(data.instrument_id)-1);
+            if (!row[1].is_null()) { s = row[1].as<std::string>(); std::strncpy(data.instrument_name, s.c_str(), sizeof(data.instrument_name)-1); }
+            if (!row[2].is_null()) { s = row[2].as<std::string>(); std::strncpy(data.exchange_id, s.c_str(), sizeof(data.exchange_id)-1); }
+            if (!row[3].is_null()) { s = row[3].as<std::string>(); std::strncpy(data.product_id, s.c_str(), sizeof(data.product_id)-1); }
+            if (!row[4].is_null()) { s = row[4].as<std::string>(); std::strncpy(data.underlying_instr_id, s.c_str(), sizeof(data.underlying_instr_id)-1); }
+            
+            data.volume_multiple = row[5].as<int>();
+            data.price_tick = row[6].as<double>();
+            
+            data.long_margin_ratio_by_money = row[7].as<double>();
+            data.long_margin_ratio_by_volume = row[8].as<double>();
+            data.short_margin_ratio_by_money = row[9].as<double>();
+            data.short_margin_ratio_by_volume = row[10].as<double>();
+            
+            data.open_ratio_by_money = row[11].as<double>();
+            data.open_ratio_by_volume = row[12].as<double>();
+            data.close_ratio_by_money = row[13].as<double>();
+            data.close_ratio_by_volume = row[14].as<double>();
+            data.close_today_ratio_by_money = row[15].as<double>();
+            data.close_today_ratio_by_volume = row[16].as<double>();
+            
+            if (!row[17].is_null()) data.strike_price = row[17].as<double>();
+            if (!row[18].is_null()) {
+                s = row[18].as<std::string>();
+                std::strncpy(data.trading_day, s.c_str(), sizeof(data.trading_day)-1);
+            }
+
+            instruments.push_back(data);
+        }
+        std::cout << "[DB] Loaded " << instruments.size() << " cached instruments." << std::endl;
+    } catch (const std::exception& e) {
+            std::cerr << "[DB] Load Instruments Error: " << e.what() << std::endl;
+    }
+    return instruments;
+}
+
 void DBManager::workerLoop() {
     while (running_) {
         try {
@@ -298,21 +361,29 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
                 "open_ratio_by_money, open_ratio_by_volume, "
                 "close_ratio_by_money, close_ratio_by_volume, "
                 "close_today_ratio_by_money, close_today_ratio_by_volume, "
-                "last_update_timestamp"
+                "last_update_timestamp, trading_day "
                 ") VALUES ("
                 "$1, $2, $3, $4, $5, $6, "
                 "$7, $8, "
                 "$9, $10, $11, $12, "
-                "$13, $14, $15, $16, $17, $18, NOW()"
+                "$13, $14, $15, $16, $17, $18, NOW(), $19"
+                // 智能更新：如果新数据的静态字段为空或0（说明这可能是一次纯费率更新），则保留原数据库中的值
                 ") ON CONFLICT (instrument_id) DO UPDATE SET "
-                "instrument_name=$2, exchange_id=$3, product_id=$4, underlying_instr_id=$5, strike_price=$6, "
-                "volume_multiple=$7, price_tick=$8, "
+                "instrument_name = CASE WHEN $2 IS NOT NULL AND $2 != '' THEN $2 ELSE tb_instruments.instrument_name END, "
+                "exchange_id = CASE WHEN $3 IS NOT NULL AND $3 != '' THEN $3 ELSE tb_instruments.exchange_id END, "
+                "product_id = CASE WHEN $4 IS NOT NULL AND $4 != '' THEN $4 ELSE tb_instruments.product_id END, "
+                "underlying_instr_id = CASE WHEN $5 IS NOT NULL AND $5 != '' THEN $5 ELSE tb_instruments.underlying_instr_id END, "
+                "strike_price = CASE WHEN $6 != 0 THEN $6 ELSE tb_instruments.strike_price END, "
+                "volume_multiple = CASE WHEN $7 != 0 THEN $7 ELSE tb_instruments.volume_multiple END, "
+                "price_tick = CASE WHEN $8 != 0 THEN $8 ELSE tb_instruments.price_tick END, "
+                
+                // 费率字段通常每次都是准的，可以直接更新 (或者也应用类似逻辑，视需求而定，这里假设费率更新总是带有有效值)
                 "long_margin_ratio_by_money=$9, long_margin_ratio_by_volume=$10, "
                 "short_margin_ratio_by_money=$11, short_margin_ratio_by_volume=$12, "
                 "open_ratio_by_money=$13, open_ratio_by_volume=$14, "
                 "close_ratio_by_money=$15, close_ratio_by_volume=$16, "
                 "close_today_ratio_by_money=$17, close_today_ratio_by_volume=$18,"
-                "last_update_timestamp=NOW()",
+                "last_update_timestamp=NOW(), trading_day=$19",
                 
                 d.instrument_id, d.instrument_name, d.exchange_id, d.product_id, d.underlying_instr_id, d.strike_price,
                 d.volume_multiple, d.price_tick,
@@ -320,7 +391,8 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
                 d.short_margin_ratio_by_money, d.short_margin_ratio_by_volume,
                 d.open_ratio_by_money, d.open_ratio_by_volume,
                 d.close_ratio_by_money, d.close_ratio_by_volume,
-                d.close_today_ratio_by_money, d.close_today_ratio_by_volume
+                d.close_today_ratio_by_money, d.close_today_ratio_by_volume,
+                d.trading_day
             );
         }
         else if (task.type == DBTaskType::ORDER) {

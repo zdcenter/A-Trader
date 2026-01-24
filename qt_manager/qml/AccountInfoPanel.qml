@@ -36,7 +36,7 @@ Rectangle {
                 font.pixelSize: 11
             }
             Text {
-                text: root.accountId
+                text: accountRoot.accountId
                 color: "white"
                 font.pixelSize: 16
                 font.bold: true

@@ -90,7 +90,12 @@ void TraderHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, C
     if (pRspInfo && pRspInfo->ErrorID == 0) {
         front_id_ = pRspUserLogin->FrontID;
         session_id_ = pRspUserLogin->SessionID;
-        std::cout << "[Td] Login Success. Confirming Settlement..." << std::endl;
+        current_trading_day_ = pRspUserLogin->TradingDay;
+        std::cout << "[Td] Login Success. Day:" << current_trading_day_ << " Confirming..." << std::endl;
+        
+        loadInstrumentsFromDB();
+        syncSubscribedInstruments();
+
         confirmSettlement();
     } else {
         std::cerr << "[Td] Login Failed: " << (pRspInfo ? pRspInfo->ErrorMsg : "Unknown") << std::endl;
@@ -204,9 +209,8 @@ void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pP
         
         // 查出持仓后，开启合约信息查询链
         // 优化：将查询任务放入队列，避免此处直接调用导致流控或阻塞 CTP 线程
-        if (instrument_cache_.find(pPos->InstrumentID) == instrument_cache_.end()) {
-             queueRateQuery(pPos->InstrumentID);
-        }
+        // 由 queueRateQuery 内部检查缓存新鲜度，此处无条件调用以确保数据校验
+        queueRateQuery(pPos->InstrumentID);
     }
 
     if (bIsLast) {
@@ -223,10 +227,23 @@ void TraderHandler::qryInstrument(const std::string& instrument_id) {
 }
 
 void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) {
+        std::cerr << "[Td Error] QryInstrument Failed: " << pRspInfo->ErrorMsg << std::endl;
+        return;
+    }
+
     if (pInstrument) {
+        // [Debug] 打印每一个收到的合约，看看 ru2605 是否出现以及属性是什么
+        // std::cout << "[Td Debug] Recv Instrument: " << pInstrument->InstrumentID 
+        //           << " Class:" << pInstrument->ProductClass << std::endl;
+
         // 只处理期货 (ProductClass == '1')
+        // 增加日志：如果是因为类型不对被过滤，打印出来
         if (pInstrument->ProductClass != THOST_FTDC_PC_Futures) {
-            return;
+            //  std::cout << "[Td Warn] Filtered Instrument (Not Future): " << pInstrument->InstrumentID 
+            //            << " Class: " << pInstrument->ProductClass << std::endl;
+            // 恢复过滤：只保留期货，过滤掉期权(2)等其他类型
+            return; 
         }
 
         InstrumentData& data = instrument_cache_[pInstrument->InstrumentID];
@@ -242,12 +259,20 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
         
         data.volume_multiple = pInstrument->VolumeMultiple;
         data.price_tick = pInstrument->PriceTick;
+
+        // Mark Trading Day
+        std::strncpy(data.trading_day, current_trading_day_.c_str(), sizeof(data.trading_day) - 1);
         
+        std::cout << "[Td] Saved Instrument: " << data.instrument_id << " (" << data.instrument_name << ")" << std::endl;
+
         // 1. 保存到数据库 (全量保存)
-        // DBManager::instance().saveInstrument(data);
+        DBManager::instance().saveInstrument(data);
 
         // 2. 直接推送到前端 (不再需要白名单，因为我们只查关注的)
         pub_.publishInstrument(data);
+    } else {
+        // pInstrument is null
+         std::cout << "[Td Warn] OnRspQryInstrument received NULL data." << std::endl;
     }
 }
 
@@ -274,7 +299,9 @@ void TraderHandler::OnRspQryInstrumentMarginRate(CThostFtdcInstrumentMarginRateF
         
         // 收到 Margin，仅更新缓存，不急着推送，等 Comm 一起推
         // pub_.publishInstrument(data);
-        // DBManager::instance().saveInstrument(data);
+        
+        std::strncpy(data.trading_day, current_trading_day_.c_str(), sizeof(data.trading_day) - 1);
+        DBManager::instance().saveInstrument(data);
     } else {
         std::cerr << "[Td Error] Margin Resp is NULL or Error" << std::endl;
     }
@@ -321,6 +348,9 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
              return;
         }
 
+        // 严防死守：如果最终 ID 还是空的，绝对不处理
+        if (target_id.empty() || target_id == "") return;
+
         std::cout << "[Td Debug] Comm Resp: " << pComm->InstrumentID 
                   << " (Mapped to: " << target_id << ")"
                   << " OpenMoney:" << pComm->OpenRatioByMoney << std::endl;
@@ -339,7 +369,20 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
         data.close_today_ratio_by_volume = pComm->CloseTodayRatioByVolume;
         
         // 收到 Comm，推送一次
+        std::strncpy(data.trading_day, current_trading_day_.c_str(), sizeof(data.trading_day) - 1);
+        DBManager::instance().saveInstrument(data);
+        
         pub_.publishInstrument(data);
+
+        // [补救措施] 如果收到了费率，但发现本地连名字都没有，说明基础查询可能丢了，尝试补查一次
+        if (std::strlen(data.instrument_name) == 0) {
+             static std::unordered_set<std::string> retry_set;
+             if (retry_set.find(target_id) == retry_set.end()) {
+                 std::cout << "[Td] Retrying QryInstrument for incomplete: " << target_id << std::endl;
+                 retry_set.insert(target_id);
+                 qryInstrument(target_id); // 立即补发一次
+             }
+        }
     } else {
         std::cerr << "[Td Error] Comm Resp is NULL or Error" << std::endl;
     }
@@ -520,17 +563,45 @@ void TraderHandler::OnErrRtnOrderInsert(CThostFtdcInputOrderField *pInput, CThos
  */
 void TraderHandler::queueRateQuery(const std::string& instrumentID) {
     if (instrumentID.empty()) return;
-    std::lock_guard<std::mutex> lock(queue_mtx_);
     
-    // 自动加入白名单：已移除，现在只要查就说明关注
-    // instrument_whitelist_.insert(instrumentID);
+    std::unique_lock<std::mutex> lock(queue_mtx_); 
+    
+    // 1. 检查缓存
+    if (instrument_cache_.count(instrumentID)) {
+         auto& d = instrument_cache_[instrumentID];
+         bool fresh = (std::string(d.trading_day) == current_trading_day_);
+         bool hasData = (d.price_tick > 0);
 
+         // [Debug]
+         // std::cout << "[Debug Cache] " << instrumentID << " Fresh:" << fresh << " HasData:" << hasData << std::endl;
+         
+         if (fresh && hasData) {
+             pub_.publishInstrument(d);
+             std::cout << "[Td] Cache Hit: " << instrumentID << " (Skip)" << std::endl;
+             return; // 命中缓存，直接结束，不入队
+         }
+    }
+
+    // 2. 缓存未命中，入队查询
     if (queried_set_.find(instrumentID) == queried_set_.end()) {
+        std::cout << "[Td] Enqueue: " << instrumentID << std::endl;
         high_priority_queue_.push_back(instrumentID);
         queried_set_.insert(instrumentID);
-        // 唤醒工作线程
         queue_cv_.notify_one();
     }
+}
+
+void TraderHandler::loadInstrumentsFromDB() {
+    auto instrs = DBManager::instance().loadAllInstruments();
+    int count = 0;
+    for (const auto& i : instrs) {
+        instrument_cache_[i.instrument_id] = i;
+        if (std::string(i.trading_day) == current_trading_day_) {
+             pub_.publishInstrument(i);
+             count++;
+        }
+    }
+    std::cout << "[Td] Loaded " << instrs.size() << " instruments from DB. Valid for Today:" << count << std::endl;
 }
 
 /**
@@ -544,7 +615,21 @@ void TraderHandler::queueRateQuery(const std::string& instrumentID) {
  *    如果并发大量查询（如启动时查几十个订阅合约），CTP 前置机可能会直接断开连接或报错。
  *    因此，这里必须串行执行，并在每次查询之间强制 sleep 1.1秒以上。
  */
+void TraderHandler::OnRspError(CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) {
+        std::cerr << "[Td Error] OnRspError: " << pRspInfo->ErrorMsg 
+                  << " (ID:" << pRspInfo->ErrorID << ")" << std::endl;
+        if (pRspInfo->ErrorID == 90) {
+            std::cerr << "!!! CTP RATE LIMIT REACHED (流控) !!!" << std::endl;
+        }
+    }
+}
+
 void TraderHandler::queryLoop() {
+    // [重要优化] 启动时先睡 5 秒，避开主线程查资金和持仓的高峰期，防止 ru2605 等首个合约被流控
+    std::cout << "[Td] QueryLoop started. Waiting 5s for startup API calm down..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    
     while (running_) {
         std::string iid;
         {
@@ -566,6 +651,18 @@ void TraderHandler::queryLoop() {
         }
 
         if (!iid.empty()) {
+            // [终极防护] 从队列取出后，执行前再检查一次缓存！
+            // 防止在 DB 加载前就有请求入队，导致 DB 加载后依然执行了陈旧的查询请求
+            if (instrument_cache_.count(iid)) {
+                auto& d = instrument_cache_[iid];
+                if (std::string(d.trading_day) == current_trading_day_ && d.price_tick > 0) {
+                     std::cout << "[Td] QueryLoop DoubleCheck Hit: " << iid << " (Drop)" << std::endl;
+                     continue; // 直接跳过，不查
+                }
+            }
+
+            std::cout << "[Td] QueryLoop Processing: " << iid << std::endl;
+            
             // CTP 限流: 每秒 1 次请求安全
             
             // 1. 先查基础信息 (VolumeMultiple, ProductID 等)
@@ -581,6 +678,16 @@ void TraderHandler::queryLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1200));
         }
     }
+}
+
+void TraderHandler::syncSubscribedInstruments() {
+    auto subs = DBManager::instance().loadSubscriptions();
+    int count = 0;
+    for (const auto& iid : subs) {
+        queueRateQuery(iid);
+        count++;
+    }
+    std::cout << "[Td] Synced " << count << " subscribed instruments." << std::endl;
 }
 
 } // namespace atrad

@@ -60,6 +60,7 @@ public:
     void OnRtnTrade(CThostFtdcTradeField *pTrade) override;
     void OnRspOrderInsert(CThostFtdcInputOrderField *pInputOrder, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnErrRtnOrderInsert(CThostFtdcInputOrderField *pInputOrder, CThostFtdcRspInfoField *pRspInfo) override;
+    void OnRspError(CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
 
 
     // 队列查询接口
@@ -82,6 +83,7 @@ private:
 
     int front_id_ = 0;
     int session_id_ = 0;
+    std::string current_trading_day_; // Added
     std::atomic<int> next_order_ref_{1};
 
     // 缓存 (恢复)
@@ -113,6 +115,9 @@ public:
     
     // 推送缓存的所有合约信息（用于前端重连）
     void pushCachedInstruments();
+
+    void loadInstrumentsFromDB(); // Added
+    void syncSubscribedInstruments(); // Added
 
     // Helper for Strategy
     bool getInstrumentData(const std::string& id, InstrumentData& out_data);

@@ -105,6 +105,9 @@ struct InstrumentData {
     double close_ratio_by_volume;
     double close_today_ratio_by_money;
     double close_today_ratio_by_volume;
+    
+    // Trading Day for validity check
+    char trading_day[16];
 };
 
 /**

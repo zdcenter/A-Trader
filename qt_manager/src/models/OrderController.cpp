@@ -74,50 +74,93 @@ void OrderController::onTick(const QString& json) {
 void OrderController::updateInstrument(const QString& json) {
     try {
         auto j = nlohmann::json::parse(json.toStdString());
-        // JSON key is now "instrument_id"
-        // Wait, if json parsing fails on key lookup it throws (operator[]) or return null/default (value)
-        // Better use .value() for safety or verify key exists.
         
         QString idStr;
         if (j.contains("instrument_id")) idStr = QString::fromStdString(j["instrument_id"]);
-        else if (j.contains("id")) idStr = QString::fromStdString(j["id"]); // fallback compatibility?
+        else if (j.contains("id")) idStr = QString::fromStdString(j["id"]); 
         
         if (idStr.isEmpty()) return;
         
+        // 增量更新逻辑：先获取现有数据，防止部分字段（如 PriceTick）在仅推送费率时被覆盖清零
         InstrumentData info;
-        std::memset(&info, 0, sizeof(info)); 
+        if (_instrument_dict.contains(idStr)) {
+            info = _instrument_dict[idStr];
+        } else {
+            std::memset(&info, 0, sizeof(info)); 
+        }
 
-        std::string s_id = j.value("instrument_id", "");
-        std::string s_name = j.value("instrument_name", "");
-        std::string s_exch = j.value("exchange_id", "");
-        std::string s_pid = j.value("product_id", "");
-        
-        strncpy(info.instrument_id, s_id.c_str(), sizeof(info.instrument_id) - 1);
-        strncpy(info.instrument_name, s_name.c_str(), sizeof(info.instrument_name) - 1);
-        strncpy(info.exchange_id, s_exch.c_str(), sizeof(info.exchange_id) - 1);
-        strncpy(info.product_id, s_pid.c_str(), sizeof(info.product_id) - 1);
+        // 解析并覆盖字段 (使用 value 提供默认值，但仅在包含该key时才覆盖可能更好，或者全部覆盖)
+        // 这里假设后端推的是全量或者包含关键key。
+        // 然而 Publisher::publishInstrument 总是推送全量字段，除了费率更新时可能...
+        // 实际上 TraderHandler::publishInstrument 也是构建了包含所有字段的 JSON。
+        // 但为了安全起见（防止后端改为部分推送），我们做增量更新是更稳健的。
 
-        info.volume_multiple = j.value("volume_multiple", 1);
-        info.price_tick = j.value("price_tick", 0.0);
+        if (j.contains("instrument_id")) {
+             std::string s = j["instrument_id"];
+             strncpy(info.instrument_id, s.c_str(), sizeof(info.instrument_id) - 1);
+        }
+        if (j.contains("instrument_name")) {
+             std::string s = j["instrument_name"];
+             strncpy(info.instrument_name, s.c_str(), sizeof(info.instrument_name) - 1);
+        }
+        if (j.contains("exchange_id")) {
+             std::string s = j["exchange_id"];
+             strncpy(info.exchange_id, s.c_str(), sizeof(info.exchange_id) - 1);
+        }
+        if (j.contains("product_id")) { // 也就是 product_id
+             std::string s = j.value("product_id", ""); // Use value for safety if key missing but expected
+             // 注意：如果 JSON 里没这个key，value() 返回空串，strncpy 会把 info.product_id 清空。
+             // 所以必须检查 key 是否存在再覆盖。
+        }
+        // 修正：上述逻辑太繁琐，Publisher.cpp 显示它总是构造完整的 JSON。
+        // 唯一的例外可能是：instrument_cache_ 在 TraderHandler 里也是分步构建的！
+        // 当 TraderHandler 收到 Instrument 时，费率为 0；收到 Margin 时，费率更新但 handler 保存了完整对象。
+        // 因此 Publisher 发出来的 JSON 应该是完整的（基于 handler 的 cache）。
+        
+        // *但是*，如果 JSON 中某个字段是 0（通过 .value 默认值），我们不希望覆盖已有的非 0 值？
+        // 不，应该信任后端传来的值。
+        // 真正的问题是：如果 startUp 时先收到了 Margin Update（极低概率，通常先 Query Instrument），
+        // 或者 Publisher 虽然构建了完整 JSON，但某些字段在 Handler 里尚未初始化（例如 PriceTick 还没查到就被 Margin 触发推送了？）
+        
+        // 我们还是按照“收到什么更新什么”的原则来写最稳妥
+        
+        if (j.contains("product_id")) {
+            std::string s = j["product_id"];
+            strncpy(info.product_id, s.c_str(), sizeof(info.product_id) - 1);
+        }
 
-        info.long_margin_ratio_by_money = j.value("long_margin_ratio_by_money", 0.0); 
-        info.short_margin_ratio_by_money = j.value("short_margin_ratio_by_money", 0.0);
+        // 关键字段 PriceTick
+        if (j.contains("price_tick")) {
+            double v = j["price_tick"].get<double>();
+            if (v > 1e-9) info.price_tick = v; // 仅当有效时更新，防止被 0 覆盖
+        }
         
-        info.open_ratio_by_money = j.value("open_ratio_by_money", 0.0);
-        info.open_ratio_by_volume = j.value("open_ratio_by_volume", 0.0);
+        if (j.contains("volume_multiple")) info.volume_multiple = j["volume_multiple"].get<int>();
+
+        // 费率
+        if (j.contains("long_margin_ratio_by_money")) info.long_margin_ratio_by_money = j["long_margin_ratio_by_money"].get<double>();
+        if (j.contains("long_margin_ratio_by_volume")) info.long_margin_ratio_by_volume = j["long_margin_ratio_by_volume"].get<double>();
+        if (j.contains("short_margin_ratio_by_money")) info.short_margin_ratio_by_money = j["short_margin_ratio_by_money"].get<double>();
+        if (j.contains("short_margin_ratio_by_volume")) info.short_margin_ratio_by_volume = j["short_margin_ratio_by_volume"].get<double>();
         
+        if (j.contains("open_ratio_by_money")) info.open_ratio_by_money = j["open_ratio_by_money"].get<double>();
+        if (j.contains("open_ratio_by_volume")) info.open_ratio_by_volume = j["open_ratio_by_volume"].get<double>();
+        if (j.contains("close_ratio_by_money")) info.close_ratio_by_money = j["close_ratio_by_money"].get<double>();
+        if (j.contains("close_ratio_by_volume")) info.close_ratio_by_volume = j["close_ratio_by_volume"].get<double>();
+        if (j.contains("close_today_ratio_by_money")) info.close_today_ratio_by_money = j["close_today_ratio_by_money"].get<double>();
+        if (j.contains("close_today_ratio_by_volume")) info.close_today_ratio_by_volume = j["close_today_ratio_by_volume"].get<double>();
+
         qDebug() << "[OrderController] Instrument Updated:" << idStr 
-                 << "Mult:" << info.volume_multiple 
-                 << "MarginRatio:" << info.long_margin_ratio_by_money;
+                 << "Tick:" << info.price_tick 
+                 << "Margin:" << info.long_margin_ratio_by_money;
 
         _instrument_dict[idStr] = info;
         
         if (idStr == _instrumentId) {
             recalculate();
+            emit orderParamsChanged(); // Ensure tick update notifies UI
         } else if (!_instrumentId.isEmpty() && _instrument_dict.contains(_instrumentId)) {
-            // 如果更新的是当前合约的 ProductID (例如当前是 p2605，收到 p 的更新)，也需要重算
             if (idStr == QString::fromUtf8(_instrument_dict[_instrumentId].product_id)) {
-                qDebug() << "[OrderController] Product ID updated (" << idStr << "), recalculating for " << _instrumentId;
                 recalculate();
             }
         }

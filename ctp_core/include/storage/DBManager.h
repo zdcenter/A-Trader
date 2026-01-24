@@ -58,6 +58,9 @@ public:
     void addSubscription(const std::string& instrumentId);
     void removeSubscription(const std::string& instrumentId);
 
+    // 加载缓存的合约信息
+    std::vector<InstrumentData> loadAllInstruments();
+
     void saveInstrument(const InstrumentData& data);
     void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "");
     void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "");

@@ -400,13 +400,14 @@ Rectangle {
                     // 买卖方向
                     Row {
                         Layout.fillWidth: true
-                        spacing: 15
+                        spacing: 10 // 统一间距
                         
                         Text {
                             text: "买卖："
                             font.pixelSize: 12
                             font.bold: true
                             color: "#ffffff"
+                            width: 42 // 固定宽度对齐
                             height: 30
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -414,6 +415,7 @@ Rectangle {
                         RadioButton {
                             id: buyRadio
                             checked: true
+                            width: 70 // 固定宽度实现列对齐
                             height: 30
                             
                             indicator: Rectangle {
@@ -446,6 +448,7 @@ Rectangle {
                         
                         RadioButton {
                             id: sellRadio
+                            width: 70
                             height: 30
                             
                             indicator: Rectangle {
@@ -480,13 +483,14 @@ Rectangle {
                     // 开平仓
                     Row {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 10
                         
                         Text {
                             text: "开平："
                             font.pixelSize: 12
                             font.bold: true
                             color: "#ffffff"
+                            width: 42
                             height: 30
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -494,6 +498,7 @@ Rectangle {
                         RadioButton {
                             id: openRadio
                             checked: true
+                            width: 70
                             height: 30
                             
                             indicator: Rectangle {
@@ -526,6 +531,7 @@ Rectangle {
                         
                         RadioButton {
                             id: closeRadio
+                            width: 70
                             height: 30
                             
                             indicator: Rectangle {
@@ -558,6 +564,7 @@ Rectangle {
                         
                         RadioButton {
                             id: closeTodayRadio
+                            width: 70
                             height: 30
                             
                             indicator: Rectangle {
@@ -691,17 +698,191 @@ Rectangle {
                         spacing: 6
                         
                         Text {
-                            text: "成交价 (0=市价)"
+                            text: "委托价格"
                             font.pixelSize: 12
                             font.bold: true
                             color: "#ffffff"
+                        }
+                        
+                        // 价格类型选择
+                        Row {
+                            spacing: 12
+                            
+                            ButtonGroup { id: priceTypeGroup }
+                            
+                            RadioButton {
+                                id: marketPriceRadio
+                                text: "市价"
+                                ButtonGroup.group: priceTypeGroup
+                                checked: true // 默认选中市价
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    font.pixelSize: 13
+                                    color: "#ffffff"
+                                    leftPadding: 28
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                
+                                indicator: Rectangle {
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    border.color: "#2196f3"
+                                    border.width: 2
+                                    color: "transparent"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    
+                                    Rectangle {
+                                        width: 10
+                                        height: 10
+                                        radius: 5
+                                        color: "#2196f3"
+                                        anchors.centerIn: parent
+                                        visible: marketPriceRadio.checked
+                                    }
+                                }
+                                
+                                onClicked: {
+                                    limitPriceInput.text = "0"
+                                    // 解除绑定，设置为固定值
+                                }
+                            }
+                            
+                            RadioButton {
+                                id: lastPriceRadio
+                                text: "最新"
+                                ButtonGroup.group: priceTypeGroup
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    font.pixelSize: 13
+                                    color: "#ffffff"
+                                    leftPadding: 28
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                
+                                indicator: Rectangle {
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    border.color: "#2196f3"
+                                    border.width: 2
+                                    color: "transparent"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    
+                                    Rectangle {
+                                        width: 10
+                                        height: 10
+                                        radius: 5
+                                        color: "#2196f3"
+                                        anchors.centerIn: parent
+                                        visible: lastPriceRadio.checked
+                                    }
+                                }
+                                
+                                onClicked: {
+                                    // 绑定到 selectedLastPrice
+                                    limitPriceInput.text = Qt.binding(function() { 
+                                        return root.selectedLastPrice > 0 ? root.selectedLastPrice.toFixed(2) : "" 
+                                    })
+                                }
+                            }
+                            
+                            RadioButton {
+                                id: bidPriceRadio
+                                text: "买一"
+                                ButtonGroup.group: priceTypeGroup
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    font.pixelSize: 13
+                                    color: "#ffffff"
+                                    leftPadding: 28
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                
+                                indicator: Rectangle {
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    border.color: "#f44336" // 买入红
+                                    border.width: 2
+                                    color: "transparent"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    
+                                    Rectangle {
+                                        width: 10
+                                        height: 10
+                                        radius: 5
+                                        color: "#f44336"
+                                        anchors.centerIn: parent
+                                        visible: bidPriceRadio.checked
+                                    }
+                                }
+                                
+                                onClicked: {
+                                    // 绑定到买一价
+                                    limitPriceInput.text = Qt.binding(function() { 
+                                        if (root.orderController && root.orderController.bidPrices && root.orderController.bidPrices.length > 0) {
+                                            var p = root.orderController.bidPrices[0]
+                                            return p > 0 ? p.toFixed(2) : ""
+                                        }
+                                        return ""
+                                    })
+                                }
+                            }
+                            
+                            RadioButton {
+                                id: askPriceRadio
+                                text: "卖一"
+                                ButtonGroup.group: priceTypeGroup
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    font.pixelSize: 13
+                                    color: "#ffffff"
+                                    leftPadding: 28
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                
+                                indicator: Rectangle {
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    border.color: "#4caf50" // 卖出绿
+                                    border.width: 2
+                                    color: "transparent"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    
+                                    Rectangle {
+                                        width: 10
+                                        height: 10
+                                        radius: 5
+                                        color: "#4caf50"
+                                        anchors.centerIn: parent
+                                        visible: askPriceRadio.checked
+                                    }
+                                }
+                                
+                                onClicked: {
+                                    // 绑定到卖一价
+                                    limitPriceInput.text = Qt.binding(function() { 
+                                        if (root.orderController && root.orderController.askPrices && root.orderController.askPrices.length > 0) {
+                                            var p = root.orderController.askPrices[0]
+                                            return p > 0 ? p.toFixed(2) : ""
+                                        }
+                                        return ""
+                                    })
+                                }
+                            }
                         }
                         
                         TextField {
                             id: limitPriceInput
                             width: parent.width
                             height: 32
-                            placeholderText: "限价 (0表示市价)"
+                            placeholderText: "输入价格 (0=市价)"
                             placeholderTextColor: "#666666"
                             text: "0"
                             font.pixelSize: 15
@@ -713,6 +894,103 @@ Rectangle {
                                 border.color: limitPriceInput.activeFocus ? "#2196f3" : "#555555"
                                 border.width: 2
                                 radius: 6
+                            }
+                            
+                            // 当用户手动输入时，清除选中状态，避免误导
+                            onTextEdited: {
+                                priceTypeGroup.checkedButton = null
+                            }
+
+                            // 微调按钮 (新增)
+                            Column {
+                                anchors.right: parent.right
+                                anchors.rightMargin: 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 24
+                                height: parent.height - 2
+                                spacing: 0
+                                
+                                // 上调按钮
+                                Rectangle {
+                                    width: 24
+                                    height: parent.height / 2
+                                    color: priceUpArea2.containsMouse ? "#444444" : "#333333"
+                                    radius: 2
+                                    
+                                    Text { 
+                                        text: "▴"
+                                        color: "#cccccc"
+                                        font.pixelSize: 14
+                                        anchors.centerIn: parent 
+                                    }
+                                    
+                                    MouseArea {
+                                        id: priceUpArea2
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            var val = parseFloat(limitPriceInput.text) || 0
+                                            var tick = (root.orderController && root.orderController.priceTick) ? root.orderController.priceTick : 0.01 // 默认最小tick
+                                            if (tick <= 0) tick = 1.0 
+                                            // 价格精度处理
+                                            var newVal = val + tick
+                                            // 简单的精度修正
+                                            newVal = Math.round(newVal / tick) * tick
+                                            
+                                            // 小数位数修正 (最多2-3位，视品种而定，通用toFixed(2)可能不够，但暂且如此或动态判断)
+                                            // 尝试推断小数位
+                                            var strTick = tick.toString()
+                                            var decimals = 0
+                                            if (strTick.indexOf('.') > -1) {
+                                                decimals = strTick.split('.')[1].length
+                                            }
+                                            
+                                            limitPriceInput.text = newVal.toFixed(decimals)
+                                            priceTypeGroup.checkedButton = null // 断开绑定
+                                        }
+                                    }
+                                }
+                                
+                                // 下调按钮
+                                Rectangle {
+                                    width: 24
+                                    height: parent.height / 2
+                                    color: priceDownArea2.containsMouse ? "#444444" : "#333333"
+                                    radius: 2
+                                    
+                                    Text { 
+                                        text: "▾"
+                                        color: "#cccccc"
+                                        font.pixelSize: 14
+                                        anchors.centerIn: parent 
+                                    }
+                                    
+                                    MouseArea {
+                                        id: priceDownArea2
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            var val = parseFloat(limitPriceInput.text) || 0
+                                            var tick = (root.orderController && root.orderController.priceTick) ? root.orderController.priceTick : 0.01
+                                            if (tick <= 0) tick = 1.0 
+                                            
+                                            var newVal = val - tick
+                                            // 价格精度处理
+                                            newVal = Math.round(newVal / tick) * tick
+                                            
+                                            if(newVal < 0) newVal = 0
+                                            
+                                            var strTick = tick.toString()
+                                            var decimals = 0
+                                            if (strTick.indexOf('.') > -1) {
+                                                decimals = strTick.split('.')[1].length
+                                            }
+                                            
+                                            limitPriceInput.text = newVal.toFixed(decimals)
+                                            priceTypeGroup.checkedButton = null // 断开绑定
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -771,18 +1049,18 @@ Rectangle {
                         color: "#2d2d30"
                         radius: 8
                         
-                        Row {
+                        RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 20
                             anchors.rightMargin: 20
                             spacing: 15
                             
-                            Text { text: "合约"; color: "#aaaaaa"; width: 100; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; height: parent.height }
-                            Text { text: "触发条件"; color: "#aaaaaa"; width: 150; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; height: parent.height }
-                            Text { text: "执行动作"; color: "#aaaaaa"; width: 200; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; height: parent.height }
-                            Text { text: "状态"; color: "#aaaaaa"; width: 80; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; height: parent.height }
-                            Item { width: 1; Layout.fillWidth: true }
-                            Text { text: "操作"; color: "#aaaaaa"; width: 60; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; height: parent.height }
+                            Text { text: "合约"; color: "#aaaaaa"; Layout.preferredWidth: 100; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; Layout.fillHeight: true }
+                            Text { text: "触发条件"; color: "#aaaaaa"; Layout.preferredWidth: 180; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; Layout.fillHeight: true }
+                            Text { text: "执行动作"; color: "#aaaaaa"; Layout.preferredWidth: 260; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; Layout.fillHeight: true }
+                            Item { Layout.fillWidth: true }
+                            Text { text: "状态"; color: "#aaaaaa"; Layout.preferredWidth: 80; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; Layout.fillHeight: true }
+                            Text { text: "操作"; color: "#aaaaaa"; Layout.preferredWidth: 60; font.pixelSize: 13; font.bold: true; verticalAlignment: Text.AlignVCenter; Layout.fillHeight: true }
                         }
                     }
                     
@@ -810,7 +1088,7 @@ Rectangle {
                             
                             property var m: modelData
                             
-                            Row {
+                            RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 20
                                 anchors.rightMargin: 20
@@ -821,17 +1099,16 @@ Rectangle {
                                     text: m.instrument_id
                                     color: "#ffffff"
                                     font.pixelSize: 14
-                                    width: 100
+                                    Layout.preferredWidth: 100
                                     verticalAlignment: Text.AlignVCenter
-                                    height: parent.height
+                                    Layout.fillHeight: true
                                 }
                                 
                                 // 触发条件
                                 Row {
-                                    width: 150
-                                    height: parent.height
+                                    Layout.preferredWidth: 180
+                                    Layout.fillHeight: true
                                     spacing: 4
-                                    anchors.verticalCenter: parent.verticalCenter
                                     
                                     Text {
                                         text: {
@@ -847,7 +1124,7 @@ Rectangle {
                                     TextField {
                                         id: editTriggerPrice
                                         text: m.trigger_price.toFixed(2)
-                                        width: 100
+                                        width: 140
                                         height: 32
                                         font.pixelSize: 15
                                         // 选中时白色，否则标准色
@@ -932,27 +1209,26 @@ Rectangle {
                                 // 执行动作
                                 Row {
                                     spacing: 8
-                                    width: 200
-                                    height: parent.height
+                                    Layout.preferredWidth: 260
+                                    Layout.fillHeight: true
                                     
-                                    Rectangle {
-                                        width: 40
-                                        height: 24
-                                        color: m.direction === "buy" ? "#4caf50" : "#f44336"
-                                        radius: 3
+                                    Text {
+                                        text: (m.direction == 0 || m.direction == '0') ? "买" : "卖"
+                                        // 中国习惯：买(多)红，卖(空)绿
+                                        color: (m.direction == 0 || m.direction == '0') ? "#f44336" : "#4caf50"
+                                        font.pixelSize: 15
+                                        font.bold: true
                                         anchors.verticalCenter: parent.verticalCenter
-                                        
-                                        Text {
-                                            text: m.direction === "buy" ? "买" : "卖"
-                                            color: "#ffffff"
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            anchors.centerIn: parent
-                                        }
                                     }
                                     
                                     Text {
-                                        text: m.offset_flag
+                                        text: {
+                                            var f = m.offset_flag
+                                            if (f == 0 || f == '0') return "开仓"
+                                            if (f == 3 || f == '3') return "平今"
+                                            if (f == 4 || f == '4') return "平仓"
+                                            return "平仓" // default
+                                        }
                                         color: "#cccccc"
                                         font.pixelSize: 13
                                         anchors.verticalCenter: parent.verticalCenter
@@ -1037,44 +1313,120 @@ Rectangle {
                                     }
                                     
                                     Text {
-                                        text: m.limit_price > 0 ? "@" + m.limit_price.toFixed(2) : "@市价"
+                                        text: "@"
                                         color: "#888888"
                                         font.pixelSize: 12
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
-                                }
-                                
-                                // 状态
-                                Rectangle {
-                                    width: 80
-                                    height: 28
-                                    color: {
-                                        if (m.status === 0) return "#1976d2"
-                                        if (m.status === 1) return "#388e3c"
-                                        return "#616161"
-                                    }
-                                    radius: 4
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    
-                                    Text {
-                                        text: {
-                                            if (m.status === 0) return "待触发"
-                                            if (m.status === 1) return "已触发"
-                                            return "已取消"
+
+                                    TextField {
+                                        id: editLimitPrice
+                                        text: m.limit_price > 0 ? m.limit_price.toFixed(2) : "0"
+                                        width: 90
+                                        height: 32
+                                        font.pixelSize: 15
+                                        color: activeFocus ? "#ffffff" : "#cccccc"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        enabled: m.status === 0
+                                        selectByMouse: true
+                                        rightPadding: activeFocus ? 26 : 6
+                                        
+                                        background: Rectangle {
+                                            color: parent.activeFocus ? "#111111" : "transparent"
+                                            border.color: parent.activeFocus ? "#2196f3" : "transparent"
+                                            border.width: parent.activeFocus ? 1 : 0
+                                            radius: 2
                                         }
-                                        color: "#ffffff"
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        anchors.centerIn: parent
+
+                                        onEditingFinished: commitChange()
+
+                                        function commitChange() {
+                                            if (m.status !== 0 || !orderController) return
+                                            
+                                            var val = parseFloat(text)
+                                            if (isNaN(val)) return
+                                            
+                                            // Get latest values from other fields
+                                            var triggerP = parseFloat(editTriggerPrice.text)
+                                            if (isNaN(triggerP)) triggerP = m.trigger_price
+                                            
+                                            var vol = parseInt(editVolume.text)
+                                            if (isNaN(vol)) vol = m.volume
+                                            
+                                            console.log("Auto Modify Limit Price:", val)
+                                            orderController.modifyConditionOrder(m.request_id, triggerP, val, vol)
+                                            focus = false
+                                        }
+
+                                        // 微调按钮 (仅更新UI，不提交，保持焦点)
+                                        Column {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 24
+                                            height: parent.height - 2
+                                            spacing: 0
+                                            visible: parent.activeFocus
+                                            
+                                            Rectangle {
+                                                width: 24; height: parent.height/2
+                                                color: upAreaL.containsMouse ? "#333333" : "transparent"
+                                                Text { text: "▴"; color: "#cccccc"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                                MouseArea {
+                                                    id: upAreaL; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: {
+                                                        editLimitPrice.forceActiveFocus()
+                                                        var v = parseFloat(editLimitPrice.text) || 0
+                                                        var tick = orderController ? orderController.getInstrumentPriceTick(m.instrument_id) : 1.0
+                                                        v = (Math.round((v + tick)/tick) * tick)
+                                                        editLimitPrice.text = v.toFixed(2)
+                                                    }
+                                                }
+                                            }
+                                            Rectangle {
+                                                width: 24; height: parent.height/2
+                                                color: downAreaL.containsMouse ? "#333333" : "transparent"
+                                                Text { text: "▾"; color: "#cccccc"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                                MouseArea {
+                                                    id: downAreaL; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: {
+                                                        editLimitPrice.forceActiveFocus()
+                                                        var v = parseFloat(editLimitPrice.text) || 0
+                                                        var tick = orderController ? orderController.getInstrumentPriceTick(m.instrument_id) : 1.0
+                                                        v = (Math.round((v - tick)/tick) * tick)
+                                                        if (v < 0) v = 0
+                                                        editLimitPrice.text = v.toFixed(2)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 
                                 Item { Layout.fillWidth: true }
+
+                                // 状态
+                                Text {
+                                    Layout.preferredWidth: 80
+                                    text: {
+                                        if (m.status === 0) return "待触发"
+                                        if (m.status === 1) return "已触发"
+                                        return "已取消"
+                                    }
+                                    color: {
+                                        if (m.status === 0) return "#2196f3"
+                                        if (m.status === 1) return "#4caf50"
+                                        return "#888888"
+                                    }
+                                    font.pixelSize: 14
+                                    horizontalAlignment: Text.AlignLeft // default left, or center if desired? Left is fine given width
+                                    verticalAlignment: Text.AlignVCenter
+                                    Layout.fillHeight: true
+                                }
                                 
                                 // 操作按钮
                                 Row {
                                     spacing: 10
-                                    anchors.verticalCenter: parent.verticalCenter
                                     
                                     /* 修改按钮已移除，功能合并至输入框
                                     Button { ... }
