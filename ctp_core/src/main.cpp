@@ -173,28 +173,49 @@ int main() {
         auto& d = req["data"];
         
         atrad::ConditionOrderRequest order;
-        std::strncpy(order.instrument_id, std::string(d["instrument_id"]).c_str(), sizeof(order.instrument_id));
-        order.trigger_price = d["trigger_price"];
-        order.compare_type = static_cast<atrad::CompareType>(d["condition_compare"].get<int>());
-        
-        // Map Int to CTP Char
-        int dir_idx = d["direction"];
-        order.direction = (dir_idx == 0) ? THOST_FTDC_D_Buy : THOST_FTDC_D_Sell;
-        
-        int off_idx = d["offset_flag"];
-        if (off_idx == 0) order.offset_flag = THOST_FTDC_OF_Open;
-        else if (off_idx == 1) order.offset_flag = THOST_FTDC_OF_Close;
-        else if (off_idx == 2) order.offset_flag = THOST_FTDC_OF_CloseToday;
-        else order.offset_flag = THOST_FTDC_OF_Open;
+        std::string inst = d.value("instrument_id", "");
+        if (inst.empty()) return "{\"status\":\"error\",\"msg\":\"Missing instrument_id\"}";
+        std::strncpy(order.instrument_id, inst.c_str(), sizeof(order.instrument_id));
 
-        int pt_idx = d["price_type"];
-        // 0: Fix, 1: Last, 2: Opp, 3: Mkt
+        order.trigger_price = d.value("trigger_price", 0.0);
+        
+        // Handle compare_type (QML uses "compare_type", Legacy "condition_compare")
+        int cmp = 0;
+        if (d.contains("compare_type")) cmp = d["compare_type"];
+        else if (d.contains("condition_compare")) cmp = d["condition_compare"];
+        order.compare_type = static_cast<atrad::CompareType>(cmp);
+        
+        // Handle Direction (String or Int)
+        if (d["direction"].is_string()) {
+            std::string dir = d["direction"];
+            order.direction = (dir == "buy" || dir == "0") ? THOST_FTDC_D_Buy : THOST_FTDC_D_Sell;
+        } else {
+            int dir_idx = d.value("direction", 0);
+            order.direction = (dir_idx == 0) ? THOST_FTDC_D_Buy : THOST_FTDC_D_Sell;
+        }
+        
+        // Handle Offset (String or Int)
+        order.offset_flag = THOST_FTDC_OF_Open; // Default
+        if (d["offset_flag"].is_string()) {
+            std::string off = d["offset_flag"];
+            if (off == "open" || off == "0") order.offset_flag = THOST_FTDC_OF_Open;
+            else if (off == "close" || off == "1") order.offset_flag = THOST_FTDC_OF_Close;
+            else if (off == "close_today" || off == "2") order.offset_flag = THOST_FTDC_OF_CloseToday;
+        } else {
+            int off_idx = d.value("offset_flag", 0);
+            if (off_idx == 1) order.offset_flag = THOST_FTDC_OF_Close;
+            else if (off_idx == 2) order.offset_flag = THOST_FTDC_OF_CloseToday;
+        }
+
+        // Price Type & Offset (Defaults)
+        int pt_idx = d.value("price_type", 0);
         order.price_type = '0' + pt_idx;
-
-        order.limit_price = d["limit_price"];
-        order.tick_offset = d["tick_offset"];
-        order.volume = d["volume"];
-        std::strncpy(order.strategy_id, std::string(d["strategy_id"]).c_str(), sizeof(order.strategy_id));
+        order.limit_price = d.value("limit_price", 0.0);
+        order.tick_offset = d.value("tick_offset", 0);
+        
+        order.volume = d.value("volume", 1);
+        std::string st_id = d.value("strategy_id", "");
+        std::strncpy(order.strategy_id, st_id.c_str(), sizeof(order.strategy_id));
         
         // Generate a request ID (timestamp based for now)
         order.request_id = std::chrono::system_clock::now().time_since_epoch().count();

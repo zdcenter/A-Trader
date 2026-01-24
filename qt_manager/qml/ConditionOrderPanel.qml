@@ -7,6 +7,21 @@ Rectangle {
     id: root
     color: "#1e1e1e"
     
+    // 焦点捕捉器：用于承载“无处安放”的焦点
+    Item {
+        id: focusTrap
+        focus: true
+    }
+
+    // 全局点击处理：点击空白区域清除焦点，触发提交
+    MouseArea {
+        anchors.fill: parent
+        z: -1 // 确保在最底层
+        onClicked: {
+            focusTrap.forceActiveFocus() // 将焦点强行转移到 trap
+        }
+    }
+    
     property var marketModel
     property var orderController
     
@@ -737,6 +752,12 @@ Rectangle {
                 radius: 8
                 border.color: "#3e3e42"
                 border.width: 1
+
+                // 点击列表背景/空白处清除焦点
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: focusTrap.forceActiveFocus()
+                }
                 
                 ColumnLayout {
                     anchors.fill: parent
@@ -773,6 +794,15 @@ Rectangle {
                         model: root.orderController ? root.orderController.conditionOrderList : null
                         spacing: 2
                         
+                        interactive: contentHeight > height
+                        
+                        // 点击列表空白处清除焦点
+                        MouseArea {
+                            anchors.fill: parent
+                            z: -1
+                            onClicked: focusTrap.forceActiveFocus()
+                        }
+                        
                         delegate: Rectangle {
                             width: ListView.view.width
                             height: 60
@@ -797,17 +827,106 @@ Rectangle {
                                 }
                                 
                                 // 触发条件
-                                Text {
-                                    text: {
-                                        var symbols = [">", "≥", "<", "≤"]
-                                        return symbols[m.compare_type] + " " + m.trigger_price.toFixed(2)
-                                    }
-                                    color: "#ffa726"
-                                    font.pixelSize: 15
-                                    font.bold: true
+                                Row {
                                     width: 150
-                                    verticalAlignment: Text.AlignVCenter
                                     height: parent.height
+                                    spacing: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    
+                                    Text {
+                                        text: {
+                                            var symbols = [">", "≥", "<", "≤"]
+                                            return symbols[m.compare_type]
+                                        }
+                                        color: "#ffa726"
+                                        font.pixelSize: 15
+                                        font.bold: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    
+                                    TextField {
+                                        id: editTriggerPrice
+                                        text: m.trigger_price.toFixed(2)
+                                        width: 100
+                                        height: 32
+                                        font.pixelSize: 15
+                                        // 选中时白色，否则标准色
+                                        color: activeFocus ? "#ffffff" : "#ffa726"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        enabled: m.status === 0
+                                        selectByMouse: true
+                                        rightPadding: activeFocus ? 26 : 6
+                                        background: Rectangle {
+                                            // 选中时背景深色(凹陷感)+边框，未选中则透明无边框
+                                            color: parent.activeFocus ? "#111111" : "transparent"
+                                            border.color: parent.activeFocus ? "#2196f3" : "transparent"
+                                            border.width: parent.activeFocus ? 1 : 0
+                                            radius: 2
+                                        }
+                                        
+                                        // 自动提交 (失去焦点时)
+                                        onEditingFinished: {
+                                            commitChange()
+                                        }
+                                        
+                                        function commitChange() {
+                                            if (m.status !== 0 || !orderController) return
+                                            
+                                            var val = parseFloat(text)
+                                            if (isNaN(val) || Math.abs(val - m.trigger_price) < 0.0001) return
+                                            
+                                            // 同时获取另一字段当前值
+                                            var vol = parseInt(editVolume.text)
+                                            if (isNaN(vol) || vol <= 0) vol = m.volume
+                                            
+                                            console.log("Auto Modify Price:", val)
+                                            orderController.modifyConditionOrder(m.request_id, val, m.limit_price, vol)
+                                            focus = false // Ensure focus cleared
+                                        }
+
+                                        // 微调按钮 (仅更新UI，不提交，保持焦点)
+                                        Column {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 24
+                                            height: parent.height - 2
+                                            spacing: 0
+                                            visible: parent.activeFocus
+                                            
+                                            Rectangle {
+                                                width: 24; height: parent.height/2
+                                                color: upAreaP.containsMouse ? "#333333" : "transparent"
+                                                Text { text: "▴"; color: "#cccccc"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                                MouseArea {
+                                                    id: upAreaP; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: {
+                                                        editTriggerPrice.forceActiveFocus()
+                                                        var v = parseFloat(editTriggerPrice.text) || 0
+                                                        var tick = orderController ? orderController.getInstrumentPriceTick(m.instrument_id) : 1.0
+                                                        v = (Math.round((v + tick)/tick) * tick)
+                                                        editTriggerPrice.text = v.toFixed(2)
+                                                    }
+                                                }
+                                            }
+                                            Rectangle {
+                                                width: 24; height: parent.height/2
+                                                color: downAreaP.containsMouse ? "#333333" : "transparent"
+                                                Text { text: "▾"; color: "#cccccc"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                                MouseArea {
+                                                    id: downAreaP; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: {
+                                                        editTriggerPrice.forceActiveFocus()
+                                                        var v = parseFloat(editTriggerPrice.text) || 0
+                                                        var tick = orderController ? orderController.getInstrumentPriceTick(m.instrument_id) : 1.0
+                                                        v = (Math.round((v - tick)/tick) * tick)
+                                                        if (v < 0) v = 0
+                                                        editTriggerPrice.text = v.toFixed(2)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 
                                 // 执行动作
@@ -839,12 +958,82 @@ Rectangle {
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     
-                                    Text {
-                                        text: m.volume + "手"
-                                        color: "#ffffff"
-                                        font.pixelSize: 14
-                                        font.bold: true
+                                    TextField {
+                                        id: editVolume
+                                        text: m.volume
+                                        width: 80
+                                        height: 32
+                                        font.pixelSize: 15
+                                        // 选中时白色，否则标准色
+                                        color: activeFocus ? "#ffffff" : "#ffffff"
                                         anchors.verticalCenter: parent.verticalCenter
+                                        enabled: m.status === 0
+                                        selectByMouse: true
+                                        rightPadding: activeFocus ? 26 : 6
+                                        background: Rectangle {
+                                            color: parent.activeFocus ? "#111111" : "transparent"
+                                            border.color: parent.activeFocus ? "#2196f3" : "transparent"
+                                            border.width: parent.activeFocus ? 1 : 0
+                                            radius: 2
+                                        }
+                                        
+                                        onEditingFinished: {
+                                            commitChange()
+                                        }
+                                        
+                                        function commitChange() {
+                                            if (m.status !== 0 || !orderController) return
+                                            
+                                            var vol = parseInt(text)
+                                            if (isNaN(vol) || vol <= 0 || vol === m.volume) return
+                                            
+                                            var price = parseFloat(editTriggerPrice.text)
+                                            if (isNaN(price)) price = m.trigger_price
+                                            
+                                            console.log("Auto Modify Volume:", vol)
+                                            orderController.modifyConditionOrder(m.request_id, price, m.limit_price, vol)
+                                            focus = false
+                                        }
+
+                                        // 微调按钮 (仅更新UI，不提交，保持焦点)
+                                        Column {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 24
+                                            height: parent.height - 2
+                                            spacing: 0
+                                            visible: parent.activeFocus
+                                            
+                                            Rectangle {
+                                                width: 24; height: parent.height/2
+                                                color: upAreaV.containsMouse ? "#333333" : "transparent"
+                                                Text { text: "▴"; color: "#cccccc"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                                MouseArea {
+                                                    id: upAreaV; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: {
+                                                        editVolume.forceActiveFocus()
+                                                        var v = parseInt(editVolume.text) || 0
+                                                        editVolume.text = v + 1
+                                                    }
+                                                }
+                                            }
+                                            Rectangle {
+                                                width: 24; height: parent.height/2
+                                                color: downAreaV.containsMouse ? "#333333" : "transparent"
+                                                Text { text: "▾"; color: "#cccccc"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                                MouseArea {
+                                                    id: downAreaV; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: {
+                                                        editVolume.forceActiveFocus()
+                                                        var v = parseInt(editVolume.text) || 0
+                                                        if (v > 1) {
+                                                            editVolume.text = v - 1
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     
                                     Text {
@@ -883,29 +1072,37 @@ Rectangle {
                                 Item { Layout.fillWidth: true }
                                 
                                 // 操作按钮
-                                Button {
-                                    width: 60
-                                    height: 32
-                                    text: "撤销"
-                                    visible: m.status === 0
+                                Row {
+                                    spacing: 10
                                     anchors.verticalCenter: parent.verticalCenter
                                     
-                                    contentItem: Text {
-                                        text: parent.text
-                                        font.pixelSize: 12
-                                        color: "#ffffff"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
+                                    /* 修改按钮已移除，功能合并至输入框
+                                    Button { ... }
+                                    */
                                     
-                                    background: Rectangle {
-                                        color: parent.down ? "#c62828" : (parent.hovered ? "#d32f2f" : "#e53935")
-                                        radius: 4
-                                    }
-                                    
-                                    onClicked: {
-                                        if (orderController) {
-                                            orderController.cancelConditionOrder(m.request_id)
+                                    Button {
+                                        width: 60
+                                        height: 32
+                                        text: "撤销"
+                                        visible: m.status === 0
+                                        
+                                        contentItem: Text {
+                                            text: parent.text
+                                            font.pixelSize: 12
+                                            color: "#ffffff"
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        
+                                        background: Rectangle {
+                                            color: parent.down ? "#c62828" : (parent.hovered ? "#d32f2f" : "#e53935")
+                                            radius: 4
+                                        }
+                                        
+                                        onClicked: {
+                                            if (orderController) {
+                                                orderController.cancelConditionOrder(m.request_id)
+                                            }
                                         }
                                     }
                                 }
@@ -927,6 +1124,8 @@ Rectangle {
         var instrument = instrumentCombo.currentText
         var triggerPrice = parseFloat(triggerPriceInput.text)
         var limitPrice = parseFloat(limitPriceInput.text)
+        if (isNaN(limitPrice)) limitPrice = 0.0 // 默认为0
+        
         var volume = parseInt(volumeInput.text)
         
         if (!instrument || isNaN(triggerPrice) || isNaN(volume) || volume <= 0) {
@@ -942,24 +1141,37 @@ Rectangle {
         if (closeRadio.checked) offsetFlag = "close"
         else if (closeTodayRadio.checked) offsetFlag = "close_today"
         
-        var compareType = conditionTypeCombo.currentIndex
+        var compareType = conditionTypeCombo.currentIndex // 0:>, 1:>=, 2:<, 3:<=
         
-        orderController.submitConditionOrder(
-            instrument,
-            triggerPrice,
-            compareType,
-            direction,
-            offsetFlag,
-            volume,
-            limitPrice
-        )
+        // 获取策略ID
+        // 如果 model 是 ListModel/Array, 取对应 index 的 id
+        // 我们绑定的是 root.orderController.strategyList (QVariantList)
+        var strategyId = ""
+        var strategyIdx = strategyCombo.currentIndex
+        var sList = root.orderController.strategyList
+        if (sList && strategyIdx >= 0 && strategyIdx < sList.length) {
+            strategyId = sList[strategyIdx].id
+        }
+        
+        var data = {
+            "instrument_id": instrument,
+            "trigger_price": triggerPrice,
+            "compare_type": compareType,
+            "direction": direction,
+            "offset_flag": offsetFlag,
+            "volume": volume,
+            "limit_price": limitPrice,
+            "strategy_id": strategyId
+        }
+        
+        console.log("Submit Condition Order:", JSON.stringify(data))
+        
+        orderController.sendConditionOrder(JSON.stringify(data))
         
         // 清空输入
-        triggerPriceInput.text = ""
-        limitPriceInput.text = "0"
-        volumeInput.text = ""
-        // 重置单选按钮
-        buyRadio.checked = true
-        openRadio.checked = true
+        // triggerPriceInput.text = "" 
+        // volumeInput.text = "1"
+        // 不清空可能方便连续下单？或者只清空价格？
+        // 这里选择不清空，保持用户输入状态
     }
 }
