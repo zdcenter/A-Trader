@@ -19,6 +19,10 @@ struct OrderItem {
     QString order_status;   // "0":AllTraded, "1":PartTraded, "3":NoTrade, "5":Canceled, "a":Unknown
     QString status_msg;
     QString insert_time;
+    // Added for cancellation
+    QString exchange_id;
+    int front_id;
+    int session_id;
 };
 
 class OrderModel : public QAbstractListModel {
@@ -35,7 +39,11 @@ public:
         VolumeTotalRole,
         StatusRole,
         StatusMsgRole,
-        TimeRole
+        TimeRole,
+        OrderRefRole, // Added
+        ExchangeIdRole, // Added
+        FrontIdRole, // Added
+        SessionIdRole // Added
     };
 
     explicit OrderModel(QObject *parent = nullptr);

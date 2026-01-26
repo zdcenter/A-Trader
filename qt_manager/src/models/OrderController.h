@@ -98,6 +98,7 @@ public slots:
     void onTick(const QString& json);
     void updateInstrument(const QString& json);
     void sendOrder(const QString& direction, const QString& offset);
+    void cancelOrder(const QString& instrumentId, const QString& orderSysId, const QString& orderRef, const QString& exchangeId, int frontId, int sessionId); // Added
     void subscribe(const QString& instrumentId);
     void unsubscribe(const QString& instrumentId);
     

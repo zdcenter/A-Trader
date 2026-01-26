@@ -37,6 +37,8 @@ struct DBTask {
     InstrumentData instr;
     CThostFtdcOrderField order;
     CThostFtdcTradeField trade;
+    double commission = 0.0; // Added for Trade
+    double close_profit = 0.0; // Added for Trade
     ConditionOrderRequest condition_order; // Added
 };
 
@@ -63,7 +65,7 @@ public:
 
     void saveInstrument(const InstrumentData& data);
     void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "");
-    void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "");
+    void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "", double commission = 0.0, double close_profit = 0.0);
     void saveConditionOrder(const ConditionOrderRequest& order); // Added
 
     // Condition Order State
@@ -71,6 +73,10 @@ public:
     void modifyConditionOrder(uint64_t request_id, double trigger_price, double limit_price, int volume); // 修改条件单
     std::vector<ConditionOrderRequest> loadConditionOrders(bool onlyActive = true);
     
+    // Data Recovery
+    std::vector<CThostFtdcOrderField> loadOrders(const std::string& trading_day);
+    std::vector<CThostFtdcTradeField> loadTrades(const std::string& trading_day);
+
     // Strategy Management
     std::vector<std::pair<std::string, std::string>> loadStrategies();
 

@@ -28,6 +28,10 @@ QVariant OrderModel::data(const QModelIndex &index, int role) const {
         case StatusRole: return item.order_status;
         case StatusMsgRole: return item.status_msg;
         case TimeRole: return item.insert_time;
+        case OrderRefRole: return item.order_ref;
+        case ExchangeIdRole: return item.exchange_id;
+        case FrontIdRole: return item.front_id;
+        case SessionIdRole: return item.session_id;
         default: return QVariant();
     }
 }
@@ -45,6 +49,10 @@ QHash<int, QByteArray> OrderModel::roleNames() const {
     roles[StatusRole] = "status";
     roles[StatusMsgRole] = "statusMsg";
     roles[TimeRole] = "time";
+    roles[OrderRefRole] = "orderRef"; // Added
+    roles[ExchangeIdRole] = "exchangeId"; // Added
+    roles[FrontIdRole] = "frontId"; // Added
+    roles[SessionIdRole] = "sessionId"; // Added
     return roles;
 }
 
@@ -65,6 +73,10 @@ void OrderModel::onOrderReceived(const QString& json) {
         item.order_status = QString::fromStdString(j.value("order_status", ""));
         item.status_msg = QString::fromStdString(j.value("status_msg", ""));
         item.insert_time = QString::fromStdString(j.value("insert_time", ""));
+        
+        item.exchange_id = QString::fromStdString(j.value("exchange_id", ""));
+        item.front_id = j.value("front_id", 0);
+        item.session_id = j.value("session_id", 0);
         
         // 查找是否存在
         int idx = findOrderIndex(item.order_sys_id, item.order_ref);

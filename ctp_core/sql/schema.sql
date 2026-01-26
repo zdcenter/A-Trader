@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS tb_trades (
     user_id VARCHAR(16),
     broker_id VARCHAR(16),
     
+    commission DOUBLE PRECISION DEFAULT 0,
+    close_profit DOUBLE PRECISION DEFAULT 0,
+    
     id SERIAL PRIMARY KEY,
     CONSTRAINT uniq_trade UNIQUE (exchange_id, trade_id, direction) -- TradeID is unique within Exchange? Usually yes.
 );

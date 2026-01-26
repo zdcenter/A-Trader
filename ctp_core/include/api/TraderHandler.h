@@ -41,6 +41,9 @@ public:
 
     // 下单接口
     int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id = "");
+    
+    // 撤单 Action
+    int cancelOrder(const std::string& instrument, const std::string& orderSysID, const std::string& orderRef, const std::string& exchangeID, int frontID, int sessionID);
 
     // --- SPI 回调 ---
     void OnFrontConnected() override;
@@ -61,6 +64,10 @@ public:
     void OnRspOrderInsert(CThostFtdcInputOrderField *pInputOrder, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnErrRtnOrderInsert(CThostFtdcInputOrderField *pInputOrder, CThostFtdcRspInfoField *pRspInfo) override;
     void OnRspError(CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
+    
+    // 撤单回调
+    void OnRspOrderAction(CThostFtdcInputOrderActionField *pInputOrderAction, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
+    void OnErrRtnOrderAction(CThostFtdcOrderActionField *pOrderAction, CThostFtdcRspInfoField *pRspInfo) override;
 
 
     // 队列查询接口
@@ -108,6 +115,10 @@ private:
     // Order Ref to Strategy ID mapping
     std::map<std::string, std::string> order_strategy_map_;
     std::mutex order_strategy_mtx_;
+    
+    // Day Orders/Trades Cache
+    std::vector<CThostFtdcOrderField> order_cache_;
+    std::vector<CThostFtdcTradeField> trade_cache_;
 
 public:
     // 推送所有缓存的持仓和资金
@@ -115,8 +126,12 @@ public:
     
     // 推送缓存的所有合约信息（用于前端重连）
     void pushCachedInstruments();
+    
+    // 推送当日所有委托和成交（用于前端重连）
+    void pushCachedOrdersAndTrades();
 
     void loadInstrumentsFromDB(); // Added
+    void loadDayOrdersFromDB(); // Added
     void syncSubscribedInstruments(); // Added
 
     // Helper for Strategy

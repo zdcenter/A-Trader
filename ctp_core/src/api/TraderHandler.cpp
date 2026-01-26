@@ -96,6 +96,18 @@ void TraderHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, C
         loadInstrumentsFromDB();
         syncSubscribedInstruments();
 
+        // [数据恢复] 加载当日的报单和成交记录
+        {
+            auto orders = DBManager::instance().loadOrders(current_trading_day_);
+            std::cout << "[Td] Restored " << orders.size() << " orders from DB." << std::endl;
+            // 逐个推送给前端
+            for (const auto& o : orders) pub_.publishOrder(&o);
+
+            auto trades = DBManager::instance().loadTrades(current_trading_day_);
+            std::cout << "[Td] Restored " << trades.size() << " trades from DB." << std::endl;
+            for (const auto& t : trades) pub_.publishTrade(&t);
+        }
+
         confirmSettlement();
     } else {
         std::cerr << "[Td] Login Failed: " << (pRspInfo ? pRspInfo->ErrorMsg : "Unknown") << std::endl;
@@ -160,6 +172,23 @@ void TraderHandler::pushCachedPositions() {
         if (instrument_cache_.find(data.instrument_id) != instrument_cache_.end()) {
             pub_.publishInstrument(instrument_cache_[data.instrument_id]);
         }
+    }
+}
+
+void TraderHandler::pushCachedOrdersAndTrades() {
+    if (current_trading_day_.empty()) return;
+    
+    // 从 DB 加载当日委托和成交
+    auto orders = DBManager::instance().loadOrders(current_trading_day_);
+    if (!orders.empty()) {
+        std::cout << "[Td] SyncState: Pushing " << orders.size() << " restored orders..." << std::endl;
+        for (const auto& o : orders) pub_.publishOrder(&o);
+    }
+
+    auto trades = DBManager::instance().loadTrades(current_trading_day_);
+    if (!trades.empty()) {
+        std::cout << "[Td] SyncState: Pushing " << trades.size() << " restored trades..." << std::endl;
+        for (const auto& t : trades) pub_.publishTrade(&t);
     }
 }
 
@@ -418,6 +447,49 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
     return td_api_->ReqOrderInsert(&req, 0);
 }
 
+int TraderHandler::cancelOrder(const std::string& instrument, const std::string& orderSysID, const std::string& orderRef, const std::string& exchangeID, int frontID, int sessionID) {
+    CThostFtdcInputOrderActionField req;
+    std::memset(&req, 0, sizeof(req));
+    
+    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
+    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
+    
+    // ActionFlag: Delete
+    req.ActionFlag = THOST_FTDC_AF_Delete;
+    
+    // 自动补全 ExchangeID
+    std::string finalExchangeID = exchangeID;
+    if (finalExchangeID.empty() && !instrument.empty()) {
+        if (instrument_cache_.count(instrument)) {
+            finalExchangeID = instrument_cache_[instrument].exchange_id;
+            std::cout << "[Td] Auto-filled ExchangeID for Cancel: " << finalExchangeID << std::endl;
+        }
+    }
+    
+    // 如果有 OrderSysID，优先使用 (ExchangeID + OrderSysID)
+    if (!orderSysID.empty()) {
+        std::strncpy(req.ExchangeID, finalExchangeID.c_str(), sizeof(req.ExchangeID));
+        std::strncpy(req.OrderSysID, orderSysID.c_str(), sizeof(req.OrderSysID));
+        // InstrumentID 对于某些柜台也是必须的
+        std::strncpy(req.InstrumentID, instrument.c_str(), sizeof(req.InstrumentID));
+    } else {
+        // 否则使用 FrontID + SessionID + OrderRef + InstrumentID
+        req.FrontID = frontID;
+        req.SessionID = sessionID;
+        std::strncpy(req.OrderRef, orderRef.c_str(), sizeof(req.OrderRef));
+        std::strncpy(req.InstrumentID, instrument.c_str(), sizeof(req.InstrumentID));
+    }
+    
+    std::cout << "[Td] ReqOrderAction: Inst:" << instrument 
+              << " SysID:" << req.OrderSysID 
+              << " Ref:" << req.OrderRef 
+              << " Exch:" << req.ExchangeID 
+              << " Front:" << req.FrontID 
+              << " Session:" << req.SessionID << std::endl;
+              
+    return td_api_->ReqOrderAction(&req, next_req_id_++);
+}
+
 void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
     if (pOrder) {
         std::cout << "[Td] Order Update: " << pOrder->OrderSysID << " Status: " << pOrder->OrderStatus << std::endl;
@@ -454,11 +526,73 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
             }
         }
         
-        // 1. 推送给前端
-        pub_.publishTrade(pTrade);
+        // 计算手续费和平仓盈亏
+        double commission = 0.0;
+        double close_profit = 0.0;
+        
+        if (instrument_cache_.count(pTrade->InstrumentID)) {
+            const auto& instr = instrument_cache_[pTrade->InstrumentID];
+            double price = pTrade->Price;
+            int vol = pTrade->Volume;
+            int mult = instr.volume_multiple > 0 ? instr.volume_multiple : 1;
+            
+            // 1. Commission
+            double r_money = 0.0;
+            double r_vol = 0.0;
+            
+            if (pTrade->OffsetFlag == THOST_FTDC_OF_Open) {
+                r_money = instr.open_ratio_by_money;
+                r_vol = instr.open_ratio_by_volume;
+            } else if (pTrade->OffsetFlag == THOST_FTDC_OF_CloseToday) {
+                r_money = instr.close_today_ratio_by_money;
+                r_vol = instr.close_today_ratio_by_volume;
+            } else {
+                r_money = instr.close_ratio_by_money;
+                r_vol = instr.close_ratio_by_volume;
+            }
+            commission = (price * vol * mult * r_money) + (vol * r_vol);
+            
+            // 2. Close Profit (Approx)
+            if (pTrade->OffsetFlag != THOST_FTDC_OF_Open) {
+                // Find opposite position direction
+                // Trade Buy (0) -> Close Short (3)
+                // Trade Sell (1) -> Close Long (2)
+                char pos_dir = (pTrade->Direction == THOST_FTDC_D_Buy) ? THOST_FTDC_PD_Short : THOST_FTDC_PD_Long;
+                std::string key = std::string(pTrade->InstrumentID) + "_" + std::to_string(pos_dir);
+                
+                if (position_cache_.count(key)) {
+                    const auto& pos = position_cache_[key];
+                    if (pos.position > 0) {
+                        double avg_cost = pos.position_cost / pos.position;
+                        // Long Profit: (Exit - Cost) * Vol * Mult
+                        // Short Profit: (Cost - Exit) * Vol * Mult
+                        if (pos_dir == THOST_FTDC_PD_Long) {
+                             close_profit = (price - avg_cost) * vol * mult;
+                        } else {
+                             close_profit = (avg_cost - price) * vol * mult;
+                        }
+                    }
+                }
+            }
+        }
 
-        // 2. 保存到数据库（带 strategy_id）
-        DBManager::instance().saveTrade(pTrade, strategy_id);
+        // 1. 推送给前端
+        pub_.publishTrade(pTrade, commission, close_profit);
+
+        // 2. 保存到数据库（带 strategy_id, commission, close_profit）
+        DBManager::instance().saveTrade(pTrade, strategy_id, commission, close_profit);
+        // 3. 更新缓存 (用于重连同步)
+        bool exists = false;
+        for (const auto& t : trade_cache_) {
+            // TradeID + Direction + OrderSysID usually unique enough, or just TradeID if Exchange is unique
+            if (std::strcmp(t.TradeID, pTrade->TradeID) == 0 && std::strcmp(t.ExchangeID, pTrade->ExchangeID) == 0) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            trade_cache_.push_back(*pTrade);
+        }
     }
     
     // 实时更新本地缓存
@@ -550,6 +684,15 @@ void TraderHandler::OnErrRtnOrderInsert(CThostFtdcInputOrderField *pInput, CThos
     if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] ErrRtn Insert: " << pRspInfo->ErrorMsg << std::endl;
 }
 
+// 撤单报错
+void TraderHandler::OnRspOrderAction(CThostFtdcInputOrderActionField *pInput, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] RspOrderAction Error: " << pRspInfo->ErrorMsg << " (" << pRspInfo->ErrorID << ")" << std::endl;
+}
+
+void TraderHandler::OnErrRtnOrderAction(CThostFtdcOrderActionField *pAction, CThostFtdcRspInfoField *pRspInfo) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] ErrRtn Action: " << pRspInfo->ErrorMsg << " (" << pRspInfo->ErrorID << ")" << std::endl;
+}
+
 
 /**
  * @brief 将合约加入费率查询队列 (线程安全)
@@ -577,14 +720,14 @@ void TraderHandler::queueRateQuery(const std::string& instrumentID) {
          
          if (fresh && hasData) {
              pub_.publishInstrument(d);
-             std::cout << "[Td] Cache Hit: " << instrumentID << " (Skip)" << std::endl;
+             // std::cout << "[Td] Cache Hit: " << instrumentID << " (Skip)" << std::endl;
              return; // 命中缓存，直接结束，不入队
          }
     }
 
     // 2. 缓存未命中，入队查询
     if (queried_set_.find(instrumentID) == queried_set_.end()) {
-        std::cout << "[Td] Enqueue: " << instrumentID << std::endl;
+        // std::cout << "[Td] Enqueue: " << instrumentID << std::endl;
         high_priority_queue_.push_back(instrumentID);
         queried_set_.insert(instrumentID);
         queue_cv_.notify_one();
@@ -656,7 +799,7 @@ void TraderHandler::queryLoop() {
             if (instrument_cache_.count(iid)) {
                 auto& d = instrument_cache_[iid];
                 if (std::string(d.trading_day) == current_trading_day_ && d.price_tick > 0) {
-                     std::cout << "[Td] QueryLoop DoubleCheck Hit: " << iid << " (Drop)" << std::endl;
+                     // std::cout << "[Td] QueryLoop DoubleCheck Hit: " << iid << " (Drop)" << std::endl;
                      continue; // 直接跳过，不查
                 }
             }
@@ -679,6 +822,8 @@ void TraderHandler::queryLoop() {
         }
     }
 }
+
+// -------------------------------------------------------------
 
 void TraderHandler::syncSubscribedInstruments() {
     auto subs = DBManager::instance().loadSubscriptions();

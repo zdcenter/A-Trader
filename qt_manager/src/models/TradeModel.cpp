@@ -24,6 +24,8 @@ QVariant TradeModel::data(const QModelIndex &index, int role) const {
         case OffsetFlagRole: return item.offset_flag;
         case PriceRole: return item.price;
         case VolumeRole: return item.volume;
+        case CommissionRole: return item.commission;
+        case CloseProfitRole: return item.close_profit;
         case TimeRole: return item.trade_time;
         case DateRole: return item.trade_date;
         default: return QVariant();
@@ -39,6 +41,8 @@ QHash<int, QByteArray> TradeModel::roleNames() const {
     roles[OffsetFlagRole] = "offsetFlag";
     roles[PriceRole] = "price";
     roles[VolumeRole] = "volume";
+    roles[CommissionRole] = "commission";
+    roles[CloseProfitRole] = "closeProfit";
     roles[TimeRole] = "time";
     roles[DateRole] = "date";
     return roles;
@@ -56,6 +60,8 @@ void TradeModel::onTradeReceived(const QString& json) {
         item.offset_flag = QString::fromStdString(j.value("offset_flag", ""));
         item.price = j.value("price", 0.0);
         item.volume = j.value("volume", 0);
+        item.commission = j.value("commission", 0.0);
+        item.close_profit = j.value("close_profit", 0.0);
         item.trade_time = QString::fromStdString(j.value("trade_time", ""));
         item.trade_date = QString::fromStdString(j.value("trade_date", ""));
         

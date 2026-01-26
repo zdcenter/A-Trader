@@ -142,6 +142,7 @@ void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
     
     j["order_status"] = std::string(1, pOrder->OrderStatus); // 报单状态
     j["status_msg"] = atrad::utils::gbk_to_utf8(pOrder->StatusMsg); // 状态信息
+    j["exchange_id"] = pOrder->ExchangeID; // Added
     
     j["insert_time"] = pOrder->InsertTime;
     
@@ -150,7 +151,7 @@ void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
     publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
 }
 
-void Publisher::publishTrade(const CThostFtdcTradeField* pTrade) {
+    void Publisher::publishTrade(const CThostFtdcTradeField* pTrade, double commission, double close_profit) {
     if (!pTrade) return;
     nlohmann::json j;
     j["instrument_id"] = pTrade->InstrumentID;
@@ -164,6 +165,10 @@ void Publisher::publishTrade(const CThostFtdcTradeField* pTrade) {
     j["volume"] = pTrade->Volume;
     j["trade_time"] = pTrade->TradeTime;
     j["trade_date"] = pTrade->TradeDate;
+    j["exchange_id"] = pTrade->ExchangeID;
+    
+    j["commission"] = commission;
+    j["close_profit"] = close_profit; // Added
     
     std::string payload = j.dump();
     publisher_->send(zmq::message_t(zmq_topics::TRADE_DATA, 2), zmq::send_flags::sndmore);

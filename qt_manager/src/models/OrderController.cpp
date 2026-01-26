@@ -228,6 +228,30 @@ void OrderController::sendOrder(const QString& direction, const QString& offset)
     qDebug() << "Order Published:" << _instrumentId << direction << offset;
 }
 
+void OrderController::cancelOrder(const QString& instrumentId, const QString& orderSysId, const QString& orderRef, const QString& exchangeId, int frontId, int sessionId) {
+    nlohmann::json j;
+    j["type"] = atrad::CmdType::OrderAction; // Use OrderAction type (usually 'action')
+    j["id"] = instrumentId.toStdString();
+    
+    nlohmann::json data;
+    data["ActionFlag"] = '0'; // Delete
+    data["InstrumentID"] = instrumentId.toStdString();
+    data["OrderSysID"] = orderSysId.toStdString();
+    data["OrderRef"] = orderRef.toStdString();
+    data["ExchangeID"] = exchangeId.toStdString(); 
+    data["FrontID"] = frontId;
+    data["SessionID"] = sessionId;
+    
+    // 我们需要在 Core 侧解析这个结构，或者简化协议。
+    // 为了保持一致，我们构造一个简单协议，类似 Order insert
+    // { "type": 2 (Action), "data": { ... } }
+    
+    j["data"] = data;
+    
+    emit orderSent(QString::fromStdString(j.dump()));
+    qDebug() << "[OrderController] Cancel Order Sent:" << instrumentId << orderRef;
+}
+
 void OrderController::subscribe(const QString& id) {
     if (id.isEmpty()) return;
     qDebug() << "[OrderController] subscribe called with:" << id;

@@ -135,6 +135,22 @@ int main() {
         td_handler.insertOrder(id, price, vol, THOST_FTDC_D_Buy, THOST_FTDC_OF_Open);
         return "{\"status\":\"ok\",\"msg\":\"Order sent to CTP\"}";
     };
+    
+    // 1.5 撤单
+    handlers[atrad::CmdType::OrderAction] = [&](const json& req) -> std::string {
+        if (!req.contains("data")) return "{\"status\":\"error\",\"msg\":\"No data field\"}";
+        auto& d = req["data"];
+        
+        std::string inst = d.value("InstrumentID", "");
+        std::string sysId = d.value("OrderSysID", "");
+        std::string ref = d.value("OrderRef", "");
+        std::string exch = d.value("ExchangeID", "");
+        int front = d.value("FrontID", 0);
+        int session = d.value("SessionID", 0);
+        
+        td_handler.cancelOrder(inst, sysId, ref, exch, front, session);
+        return "{\"status\":\"ok\",\"msg\":\"OrderAction sent\"}";
+    };
 
     // 2. 订阅
     handlers[atrad::CmdType::Subscribe] = [&](const json& req) {
@@ -164,6 +180,8 @@ int main() {
         td_handler.qryAccount();
         td_handler.pushCachedPositions();
         td_handler.pushCachedInstruments();
+        td_handler.pushCachedOrdersAndTrades();
+        
         return "{\"status\":\"ok\",\"msg\":\"Sync started\"}";
     };
 

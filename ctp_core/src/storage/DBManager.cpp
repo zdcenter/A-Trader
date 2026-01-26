@@ -96,12 +96,14 @@ void DBManager::saveOrder(const CThostFtdcOrderField* pOrder, const std::string&
     cv_.notify_one();
 }
 
-void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id) {
+void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id, double commission, double close_profit) {
     if (!pTrade) return;
     std::lock_guard<std::mutex> lock(queueMutex_);
     DBTask task;
     task.type = DBTaskType::TRADE;
     task.strategy_id = strategy_id;
+    task.commission = commission;
+    task.close_profit = close_profit;
     std::memcpy(&task.trade, pTrade, sizeof(CThostFtdcTradeField));
     tasks_.push(task);
     cv_.notify_one();
@@ -403,19 +405,21 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
             std::string offset(1, o.CombOffsetFlag[0]);
             std::string status(1, o.OrderStatus);
             
-            // Added strategy_id at param $13
-            txn.exec_params("INSERT INTO tb_orders (front_id, session_id, order_ref, instrument_id, exchange_id, limit_price, volume_total_original, direction, offset_flag, order_status, status_msg, insert_time, strategy_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (front_id, session_id, order_ref) DO UPDATE SET order_status=$10, status_msg=$11, volume_traded=tb_orders.volume_traded, strategy_id=$13",
+            // Added strategy_id at param $13, broker_id at $14, insert_date at $15
+            // Added volume_traded at $16, volume_total at $17
+            txn.exec_params("INSERT INTO tb_orders (front_id, session_id, order_ref, instrument_id, exchange_id, limit_price, volume_total_original, direction, offset_flag, order_status, status_msg, insert_time, strategy_id, broker_id, insert_date, volume_traded, volume_total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) ON CONFLICT (front_id, session_id, order_ref) DO UPDATE SET order_status=$10, status_msg=$11, volume_traded=$16, volume_total=$17, strategy_id=$13, broker_id=$14, insert_date=$15",
                 o.FrontID, o.SessionID, o.OrderRef, o.InstrumentID, o.ExchangeID, o.LimitPrice, o.VolumeTotalOriginal, 
-                dir, offset, status, o.StatusMsg, o.InsertTime, task.strategy_id);
+                dir, offset, status, o.StatusMsg, o.InsertTime, task.strategy_id, o.BrokerID, o.InsertDate, o.VolumeTraded, o.VolumeTotal);
         }
         else if (task.type == DBTaskType::TRADE) {
             const auto& t = task.trade;
             std::string dir(1, t.Direction);
             std::string offset(1, t.OffsetFlag);
             
-            // Added strategy_id at param $10
-            txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time, strategy_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
-                 t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime, task.strategy_id);
+            // Added strategy_id at param $10, broker_id at $11
+            // Added commission at $12, close_profit at $13
+            txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time, strategy_id, broker_id, commission, close_profit) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
+                 t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime, task.strategy_id, t.BrokerID, task.commission, task.close_profit);
         }
         else if (task.type == DBTaskType::CONDITION_ORDER) {
             const auto& o = task.condition_order;
@@ -431,8 +435,104 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
                             dir, off, o.volume, o.limit_price, o.strategy_id);
         }
     } catch (const std::exception& e) {
-        std::cerr << "[DB] Insert Error: " << e.what() << std::endl;
+        std::cerr << "[DB] Processing Task Error: " << e.what() << std::endl;
+        // 如果出错，可能需要回滚等处理，这里依靠 txn 析构时的自动回滚（如果没 commit）
+        // 但这里 txn 是外层传进来的，外层 catch 后会决定是否 commit
+        throw; // 抛出让外层知道
     }
+}
+
+std::vector<CThostFtdcOrderField> DBManager::loadOrders(const std::string& trading_day) {
+    std::vector<CThostFtdcOrderField> list;
+    if (connStr_.empty()) return list;
+    
+    try {
+        pqxx::connection c(connStr_);
+        c.set_client_encoding("GB18030"); // Ensure retrieved data is GBK to match CTP behavior for Publisher
+        pqxx::work txn(c);
+        
+        // 加载最近的委托，不严格匹配日期，防止夜盘/SimNow日期不一致导致看不到单子
+        std::string sql = "SELECT instrument_id, direction, offset_flag, limit_price, "
+                          "volume_total_original, volume_traded, volume_total, "
+                          "order_status, status_msg, "
+                          "order_ref, front_id, session_id, exchange_id, insert_date, insert_time, broker_id "
+                          "FROM tb_orders ORDER BY insert_date DESC, insert_time DESC LIMIT 1000";
+        
+        pqxx::result r = txn.exec(sql);
+        std::cout << "[DB] loadOrders sql result size: " << r.size() << std::endl;
+        
+        for (auto row : r) {
+            try {
+                CThostFtdcOrderField o = {};
+                std::strncpy(o.InstrumentID, row[0].c_str(), sizeof(o.InstrumentID) - 1);
+                
+                // char fields
+                if (!row[1].is_null()) o.Direction = row[1].c_str()[0];
+                if (!row[2].is_null()) o.CombOffsetFlag[0] = row[2].c_str()[0]; 
+                
+                o.LimitPrice = row[3].as<double>(0.0);
+                o.VolumeTotalOriginal = row[4].as<int>(0);
+                o.VolumeTraded = row[5].as<int>(0);
+                o.VolumeTotal = row[6].as<int>(0);
+                
+                if (!row[7].is_null()) o.OrderStatus = row[7].c_str()[0];
+                if (!row[8].is_null()) std::strncpy(o.StatusMsg, row[8].c_str(), sizeof(o.StatusMsg) - 1);
+                if (!row[9].is_null()) std::strncpy(o.OrderRef, row[9].c_str(), sizeof(o.OrderRef) - 1);
+                
+                // Use default 0 for IDs if null
+                o.FrontID = row[10].as<int>(0); 
+                o.SessionID = row[11].as<int>(0);
+                
+                if (!row[12].is_null()) std::strncpy(o.ExchangeID, row[12].c_str(), sizeof(o.ExchangeID) - 1);
+                if (!row[13].is_null()) std::strncpy(o.InsertDate, row[13].c_str(), sizeof(o.InsertDate) - 1);
+                if (!row[14].is_null()) std::strncpy(o.InsertTime, row[14].c_str(), sizeof(o.InsertTime) - 1);
+                if (!row[15].is_null()) std::strncpy(o.BrokerID, row[15].c_str(), sizeof(o.BrokerID) - 1);
+                
+                list.push_back(o);
+            } catch (const std::exception& inner_e) {
+                std::cerr << "[DB] Error parsing order row " << row.rownumber() << ": " << inner_e.what() << std::endl;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] loadOrders Error: " << e.what() << std::endl;
+    }
+    return list;
+}
+
+std::vector<CThostFtdcTradeField> DBManager::loadTrades(const std::string& trading_day) {
+    std::vector<CThostFtdcTradeField> list;
+    if (connStr_.empty()) return list;
+
+    try {
+        pqxx::connection c(connStr_);
+        c.set_client_encoding("GB18030"); // Ensure retrieved data is GBK
+        pqxx::work txn(c);
+
+        std::string sql = "SELECT instrument_id, direction, offset_flag, price, volume, "
+                          "trade_id, order_ref, exchange_id, trade_date, trade_time, broker_id "
+                          "FROM tb_trades ORDER BY trade_date DESC, trade_time DESC LIMIT 1000";
+
+        pqxx::result r = txn.exec(sql);
+        for (auto row : r) {
+            CThostFtdcTradeField t = {};
+            std::strncpy(t.InstrumentID, row[0].c_str(), sizeof(t.InstrumentID) - 1);
+            t.Direction = row[1].c_str()[0];
+            t.OffsetFlag = row[2].c_str()[0];
+            t.Price = row[3].as<double>();
+            t.Volume = row[4].as<int>();
+            std::strncpy(t.TradeID, row[5].c_str(), sizeof(t.TradeID) - 1);
+            std::strncpy(t.OrderRef, row[6].c_str(), sizeof(t.OrderRef) - 1);
+            std::strncpy(t.ExchangeID, row[7].c_str(), sizeof(t.ExchangeID) - 1);
+            std::strncpy(t.TradeDate, row[8].c_str(), sizeof(t.TradeDate) - 1);
+            std::strncpy(t.TradeTime, row[9].c_str(), sizeof(t.TradeTime) - 1);
+            if (!row[10].is_null()) std::strncpy(t.BrokerID, row[10].c_str(), sizeof(t.BrokerID) - 1);
+
+            list.push_back(t);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] loadTrades Error: " << e.what() << std::endl;
+    }
+    return list;
 }
 
 } // namespace atrad

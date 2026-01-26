@@ -205,6 +205,13 @@ void ConditionEngine::executeOrder(ConditionOrderRequest& order, const CThostFtd
         base_price += (order.tick_offset * price_tick);
     }
 
+    std::cout << "[ConditionEngine] Executing: " << order.instrument_id 
+              << " PriceType:" << order.price_type 
+              << " Base:" << base_price 
+              << " Vol:" << order.volume 
+              << " Flag:" << order.offset_flag
+              << " Tick:" << price_tick << std::endl;
+
     // 4. Send Order (带 strategy_id)
     trader_.insertOrder(order.instrument_id, base_price, order.volume, order.direction, order.offset_flag, order.strategy_id);
 }

@@ -14,6 +14,8 @@ struct TradeItem {
     QString offset_flag;    // "0":Open, "1":Close ...
     double price;
     int volume;
+    double commission; // Added
+    double close_profit; // Added
     QString trade_time;
     QString trade_date;
 };
@@ -29,6 +31,8 @@ public:
         OffsetFlagRole,
         PriceRole,
         VolumeRole,
+        CommissionRole, // Added
+        CloseProfitRole, // Added
         TimeRole,
         DateRole
     };

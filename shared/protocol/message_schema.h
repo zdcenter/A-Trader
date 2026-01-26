@@ -183,6 +183,7 @@ namespace CmdType {
     const std::string Ping = "PING";
     const std::string Pong = "PONG";
     const std::string SyncState = "SYNC_STATE";
+    const std::string OrderAction = "ORDER_ACTION"; // Added
     const std::string ConditionOrderQuery = "req_condition_order_query"; // Added
     const std::string StrategyQuery = "req_strategy_query"; // Added
 
