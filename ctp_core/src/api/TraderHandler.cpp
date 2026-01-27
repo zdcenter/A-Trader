@@ -105,7 +105,7 @@ void TraderHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, C
 
             auto trades = DBManager::instance().loadTrades(current_trading_day_);
             std::cout << "[Td] Restored " << trades.size() << " trades from DB." << std::endl;
-            for (const auto& t : trades) pub_.publishTrade(&t);
+            for (const auto& t : trades) pub_.publishTrade(t);
         }
 
         confirmSettlement();
@@ -188,7 +188,7 @@ void TraderHandler::pushCachedOrdersAndTrades() {
     auto trades = DBManager::instance().loadTrades(current_trading_day_);
     if (!trades.empty()) {
         std::cout << "[Td] SyncState: Pushing " << trades.size() << " restored trades..." << std::endl;
-        for (const auto& t : trades) pub_.publishTrade(&t);
+        for (const auto& t : trades) pub_.publishTrade(t);
     }
 }
 
@@ -244,6 +244,8 @@ void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pP
 
     if (bIsLast) {
         std::cout << "[Td] Position Sync Completed. Total Cached: " << position_cache_.size() << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Short delay
+        qryPositionDetail();
     }
 }
 
@@ -417,14 +419,132 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
     }
 }
 
+void TraderHandler::qryPositionDetail() {
+    CThostFtdcQryInvestorPositionDetailField req;
+    std::memset(&req, 0, sizeof(req));
+    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
+    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
+    std::cout << "[Td] Querying Investor Position Detail..." << std::endl;
+    td_api_->ReqQryInvestorPositionDetail(&req, 0);
+}
+
+void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDetailField *pDetail, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) {
+        std::cerr << "[Td Error] Qry Position Detail Failed: " << pRspInfo->ErrorMsg << std::endl;
+        return;
+    }
+
+    if (pDetail) {
+        // 过滤已平仓明细 (CTP 有时会推送 Volume=0 的记录)
+        if (pDetail->Volume <= 0) return;
+
+        std::lock_guard<std::mutex> lock(position_detail_mtx_);
+        
+        // Key format: InstrumentID_Direction (0 for Buy/Long, 1 for Sell/Short)
+        // Note: For PositionDetail, Direction is the position direction (Buy=Long, Sell=Short)
+        std::string key = std::string(pDetail->InstrumentID) + "_" + std::to_string(pDetail->Direction);
+        
+        PositionDetailData item;
+        std::memset(&item, 0, sizeof(item)); // Ensure clean start
+        
+        std::strncpy(item.trade_id, pDetail->TradeID, sizeof(item.trade_id) - 1);
+        std::strncpy(item.instrument_id, pDetail->InstrumentID, sizeof(item.instrument_id) - 1);
+        std::strncpy(item.exchange_id, pDetail->ExchangeID, sizeof(item.exchange_id) - 1);
+        item.direction = pDetail->Direction;
+        item.open_price = pDetail->OpenPrice;
+        item.volume = pDetail->Volume; // Remaining volume
+        std::strncpy(item.open_date, pDetail->OpenDate, sizeof(item.open_date) - 1);
+        
+        item.margin = pDetail->Margin;
+        item.settlement_price = pDetail->SettlementPrice;
+        item.close_profit_by_date = pDetail->CloseProfitByDate;
+        item.close_profit_by_trade = pDetail->CloseProfitByTrade;
+        item.position_profit_by_date = pDetail->PositionProfitByDate;
+        item.position_profit_by_trade = pDetail->PositionProfitByTrade;
+        
+        open_position_queues_[key].push_back(item);
+        
+        std::cout << "[Td Detail] Loaded Pos: " << item.instrument_id << " Dir:" << (int)item.direction 
+                  << " Price:" << item.open_price << " Vol:" << item.volume 
+                  << " Date:" << item.open_date << std::endl;
+    }
+
+    if (bIsLast) {
+        std::cout << "[Td] Position Detail Query Completed. Sort queues..." << std::endl;
+        std::lock_guard<std::mutex> lock(position_detail_mtx_);
+        for (auto& [key, queue] : open_position_queues_) {
+            // Sort by OpenDate, TradeID just to be sure FIFO order is correct
+             std::sort(queue.begin(), queue.end(), [](const PositionDetailData& a, const PositionDetailData& b) {
+                 int date_cmp = std::strcmp(a.open_date, b.open_date);
+                 if (date_cmp != 0) return date_cmp < 0;
+                 return std::strcmp(a.trade_id, b.trade_id) < 0;
+             });
+        }
+    }
+}
+
 int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id) {
     CThostFtdcInputOrderField req;
     std::memset(&req, 0, sizeof(req));
     std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
     std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
     std::strncpy(req.InstrumentID, instrument.c_str(), sizeof(req.InstrumentID));
-    std::string ref = std::to_string(next_order_ref_++);
-    std::strncpy(req.OrderRef, ref.c_str(), sizeof(req.OrderRef));
+    
+    // 极致性能高频 OrderRef: DDHHMMSS(Cache) + uuu(Realtime) -> 11位
+    // 零堆内存分配，秒级缓存避免 localtime_r 开销
+    char ref[13];
+    {
+        std::lock_guard<std::mutex> lock(ref_mtx_);
+        
+        // 1. 获取当前毫秒时间戳
+        auto now = std::chrono::system_clock::now();
+        auto ms_part = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+        long long total_ms = ms_part.count();
+        long long current_sec = total_ms / 1000;
+        int current_ms = total_ms % 1000;
+        
+        // 2. 只有秒数变了才重新计算 DDHHMMSS (耗时的部分)
+        if (current_sec != cached_second_) {
+            std::time_t t = current_sec;
+            struct tm tm;
+            localtime_r(&t, &tm);
+            // 格式化前8位: DDHHMMSS 到缓存
+            std::sprintf(cached_ref_prefix_, "%02d%02d%02d%02d", 
+                tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+            cached_second_ = current_sec;
+        }
+
+        // 3. 处理极高频 (1ms内多单) 的唯一性
+        static int last_ms_check = -1;
+        static int ms_offset = 0;
+        
+        if (current_ms == last_ms_check) {
+            ms_offset++; // 毫秒内碰撞，逻辑增加
+        } else {
+            last_ms_check = current_ms;
+            ms_offset = 0;
+        }
+        
+        // 加上偏移量，保证单调递增
+        int final_ms = current_ms + ms_offset;
+        
+        // 极端兜底: CTP Ref 长度限制，必须保持3位。
+        // 如果一毫秒内真的发了 >10 单导致溢出，这在物理网络IO下极难发生。
+        // 如果发生，为了不乱码，只能取模或截断(可能会重复)，但在实盘中不太可能。
+        if (final_ms > 999) final_ms = 999; 
+
+        // 4. 极速拼接: Prefix(8) + MS(3) -> Ref(11)
+        // 手动拷贝和转换，比 sprintf 快
+        std::memcpy(ref, cached_ref_prefix_, 8);
+        
+        // 快速 int 转 3位 char
+        ref[8] = '0' + (final_ms / 100);
+        ref[9] = '0' + ((final_ms / 10) % 10);
+        ref[10] = '0' + (final_ms % 10);
+        ref[11] = '\0';
+    }
+    
+    std::strncpy(req.OrderRef, ref, sizeof(req.OrderRef));
     req.OrderPriceType = THOST_FTDC_OPT_LimitPrice;
     req.Direction = direction; 
     req.CombOffsetFlag[0] = offset;
@@ -504,6 +624,11 @@ void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
             }
         }
         
+        // [关键修复] 如果 CTP 回报没带日期，强制补全当前交易日，确保 DB 查询能过滤出来
+        if (std::strlen(pOrder->InsertDate) == 0 && !current_trading_day_.empty()) {
+             std::strncpy(pOrder->InsertDate, current_trading_day_.c_str(), sizeof(pOrder->InsertDate) - 1);
+        }
+
         // 1. 推送给前端
         pub_.publishOrder(pOrder);
         
@@ -552,26 +677,94 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
             }
             commission = (price * vol * mult * r_money) + (vol * r_vol);
             
-            // 2. Close Profit (Approx)
-            if (pTrade->OffsetFlag != THOST_FTDC_OF_Open) {
-                // Find opposite position direction
-                // Trade Buy (0) -> Close Short (3)
-                // Trade Sell (1) -> Close Long (2)
+            // 2. Close Profit (FIFO Logic)
+            if (pTrade->OffsetFlag == THOST_FTDC_OF_Open) {
+                // [Open Trade] Add to FIFO queue
+                std::lock_guard<std::mutex> lock(position_detail_mtx_);
+                // Key: InstrumentID + Direction (Open Buy -> Long Pos(Buy), Open Sell -> Short Pos(Sell))
+                std::string key = std::string(pTrade->InstrumentID) + "_" + std::to_string(pTrade->Direction);
+                
+                PositionDetailData item;
+                std::memset(&item, 0, sizeof(item));
+                
+                std::strncpy(item.trade_id, pTrade->TradeID, sizeof(item.trade_id) - 1);
+                std::strncpy(item.instrument_id, pTrade->InstrumentID, sizeof(item.instrument_id) - 1);
+                std::strncpy(item.exchange_id, pTrade->ExchangeID, sizeof(item.exchange_id) - 1);
+                item.direction = pTrade->Direction;
+                item.open_price = pTrade->Price;
+                item.volume = pTrade->Volume;
+                // Use current trading day for new trades
+                std::strncpy(item.open_date, current_trading_day_.c_str(), sizeof(item.open_date) - 1);
+                
+                open_position_queues_[key].push_back(item);
+                
+                // std::cout << "[Td FIFO] Added Open Pos: " << key << " Vol:" << item.volume << " @" << item.open_price << std::endl;
+                
+            } else {
+                // [Close Trade] Match against FIFO queue
+                // Trade Direction Buy -> Closing Short Position (Sell direction in queue)
+                // Trade Direction Sell -> Closing Long Position (Buy direction in queue)
                 char pos_dir = (pTrade->Direction == THOST_FTDC_D_Buy) ? THOST_FTDC_PD_Short : THOST_FTDC_PD_Long;
                 std::string key = std::string(pTrade->InstrumentID) + "_" + std::to_string(pos_dir);
                 
-                if (position_cache_.count(key)) {
-                    const auto& pos = position_cache_[key];
-                    if (pos.position > 0) {
-                        double avg_cost = pos.position_cost / pos.position;
-                        // Long Profit: (Exit - Cost) * Vol * Mult
-                        // Short Profit: (Cost - Exit) * Vol * Mult
-                        if (pos_dir == THOST_FTDC_PD_Long) {
-                             close_profit = (price - avg_cost) * vol * mult;
-                        } else {
-                             close_profit = (avg_cost - price) * vol * mult;
+                std::lock_guard<std::mutex> lock(position_detail_mtx_);
+                if (open_position_queues_.find(key) != open_position_queues_.end()) {
+                    auto& queue = open_position_queues_[key];
+                    int remain_vol = pTrade->Volume;
+                    bool is_close_today = (pTrade->OffsetFlag == THOST_FTDC_OF_CloseToday);
+                    
+                    while (remain_vol > 0 && !queue.empty()) {
+                        // Find matching position based on OffsetFlag
+                        auto it = queue.begin();
+                        if (is_close_today) {
+                            // CloseToday: Skip old positions, find first Today's position
+                            while (it != queue.end()) {
+                                if (std::strcmp(it->open_date, current_trading_day_.c_str()) == 0) {
+                                    break;
+                                }
+                                ++it;
+                            }
+                        }
+                        
+                        // If no matching position found for CloseToday, or queue empty
+                        if (it == queue.end()) {
+                             std::cerr << "[Td Warning] No matching position found for Close (Today=" 
+                                       << is_close_today << ") in " << key << std::endl;
+                             break;
+                        }
+
+                        // Use reference to modify volume in place
+                        auto& pos_match = *it;
+                        int match_vol = std::min(remain_vol, pos_match.volume);
+                        
+                        double profit = 0;
+                        if (pos_dir == THOST_FTDC_PD_Long) { 
+                            // Long Profit: (Exit - Entry) * Vol * Mult
+                            profit = (price - pos_match.open_price) * match_vol * mult;
+                        } else { 
+                            // Short Profit: (Entry - Exit) * Vol * Mult
+                            profit = (pos_match.open_price - price) * match_vol * mult;
+                        }
+                        close_profit += profit;
+                        
+                        // std::cout << "[Td Close] " << (is_close_today ? "Today " : "FIFO ") 
+                        //           << "Match: " << match_vol << " Profit: " << profit 
+                        //           << " (Entry: " << pos_match.open_price << " Exit: " << price << ")" << std::endl;
+
+                        pos_match.volume -= match_vol;
+                        remain_vol -= match_vol;
+                        
+                        if (pos_match.volume <= 0) {
+                            queue.erase(it); // Remove fully closed position
                         }
                     }
+                    
+                    if (remain_vol > 0) {
+                        std::cerr << "[Td Warning] Close volume mismatch: Remaining " << remain_vol 
+                                  << " not matched for " << key << std::endl;
+                    }
+                } else {
+                     std::cerr << "[Td Warning] No Open Position Queue for " << key << " to close." << std::endl;
                 }
             }
         }
@@ -585,14 +778,35 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
         bool exists = false;
         for (const auto& t : trade_cache_) {
             // TradeID + Direction + OrderSysID usually unique enough, or just TradeID if Exchange is unique
-            if (std::strcmp(t.TradeID, pTrade->TradeID) == 0 && std::strcmp(t.ExchangeID, pTrade->ExchangeID) == 0) {
+            if (std::strcmp(t.trade_id, pTrade->TradeID) == 0 && std::strcmp(t.exchange_id, pTrade->ExchangeID) == 0) {
                 exists = true;
                 break;
             }
         }
         if (!exists) {
-            trade_cache_.push_back(*pTrade);
+            TradeData td;
+            std::memset(&td, 0, sizeof(td));
+            std::strncpy(td.instrument_id, pTrade->InstrumentID, sizeof(td.instrument_id)-1);
+            std::strncpy(td.trade_id, pTrade->TradeID, sizeof(td.trade_id)-1);
+            std::strncpy(td.order_sys_id, pTrade->OrderSysID, sizeof(td.order_sys_id)-1);
+            td.direction = pTrade->Direction;
+            td.offset_flag = pTrade->OffsetFlag;
+            td.price = pTrade->Price;
+            td.volume = pTrade->Volume;
+            std::strncpy(td.trade_time, pTrade->TradeTime, sizeof(td.trade_time)-1);
+            std::strncpy(td.trade_date, pTrade->TradeDate, sizeof(td.trade_date)-1);
+            std::strncpy(td.exchange_id, pTrade->ExchangeID, sizeof(td.exchange_id)-1);
+            
+            td.commission = commission;
+            td.close_profit = close_profit;
+            std::strncpy(td.strategy_id, strategy_id.c_str(), sizeof(td.strategy_id)-1);
+
+            trade_cache_.push_back(td);
         }
+        
+        // 4. 更新本地持仓和资金
+        updateLocalPosition(pTrade);
+        updateLocalAccount(pTrade);
     }
     
     // 实时更新本地缓存
@@ -734,18 +948,38 @@ void TraderHandler::queueRateQuery(const std::string& instrumentID) {
     }
 }
 
+
+
 void TraderHandler::loadInstrumentsFromDB() {
     auto instrs = DBManager::instance().loadAllInstruments();
     int count = 0;
     for (const auto& i : instrs) {
         instrument_cache_[i.instrument_id] = i;
         if (std::string(i.trading_day) == current_trading_day_) {
-             pub_.publishInstrument(i);
              count++;
         }
     }
     std::cout << "[Td] Loaded " << instrs.size() << " instruments from DB. Valid for Today:" << count << std::endl;
+    
+    // 改为查 CTP 持仓明细来初始化 FIFO 队列 (准确且高效)
+    qryPositionDetail();
 }
+
+void TraderHandler::loadDayOrdersFromDB() {
+    auto day_orders = DBManager::instance().loadOrders(current_trading_day_);
+    {
+        std::lock_guard<std::mutex> lock(ref_mtx_);
+        order_cache_ = day_orders; 
+    }
+    pushCachedOrdersAndTrades();
+}
+
+void TraderHandler::restorePositionDetails() {
+    // Deprecated by qryPositionDetail.
+    // Left empty.
+}
+
+
 
 /**
  * @brief 费率查询工作线程循环
@@ -767,7 +1001,6 @@ void TraderHandler::OnRspError(CThostFtdcRspInfoField *pRspInfo, int nRequestID,
         }
     }
 }
-
 void TraderHandler::queryLoop() {
     // [重要优化] 启动时先睡 5 秒，避开主线程查资金和持仓的高峰期，防止 ru2605 等首个合约被流控
     std::cout << "[Td] QueryLoop started. Waiting 5s for startup API calm down..." << std::endl;

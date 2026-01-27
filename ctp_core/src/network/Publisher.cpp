@@ -151,7 +151,7 @@ void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
     publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
 }
 
-    void Publisher::publishTrade(const CThostFtdcTradeField* pTrade, double commission, double close_profit) {
+void Publisher::publishTrade(const CThostFtdcTradeField* pTrade, double commission, double close_profit) {
     if (!pTrade) return;
     nlohmann::json j;
     j["instrument_id"] = pTrade->InstrumentID;
@@ -169,6 +169,29 @@ void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
     
     j["commission"] = commission;
     j["close_profit"] = close_profit; // Added
+    
+    std::string payload = j.dump();
+    publisher_->send(zmq::message_t(zmq_topics::TRADE_DATA, 2), zmq::send_flags::sndmore);
+    publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
+}
+
+void Publisher::publishTrade(const TradeData& data) {
+    nlohmann::json j;
+    j["instrument_id"] = data.instrument_id;
+    j["trade_id"] = data.trade_id;
+    j["order_sys_id"] = data.order_sys_id;
+    
+    j["direction"] = std::string(1, data.direction);
+    j["offset_flag"] = std::string(1, data.offset_flag);
+    
+    j["price"] = data.price;
+    j["volume"] = data.volume;
+    j["trade_time"] = data.trade_time;
+    j["trade_date"] = data.trade_date;
+    j["exchange_id"] = data.exchange_id;
+    
+    j["commission"] = data.commission;
+    j["close_profit"] = data.close_profit;
     
     std::string payload = j.dump();
     publisher_->send(zmq::message_t(zmq_topics::TRADE_DATA, 2), zmq::send_flags::sndmore);

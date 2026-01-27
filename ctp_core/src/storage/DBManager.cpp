@@ -168,9 +168,12 @@ std::vector<ConditionOrderRequest> DBManager::loadConditionOrders(bool onlyActiv
             sql = "SELECT instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, request_id, strategy_id "
                   "FROM tb_condition_orders WHERE status = 0";
         } else {
-            // Load ALL (Active + History), maybe limit for performance
+            // Load History for Frontend (Limit to recent 24h to avoid too many records)
+            // Use ASC order so frontend prepend works correctly (similar to Orders/Trades)
             sql = "SELECT instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, request_id, strategy_id "
-                  "FROM tb_condition_orders ORDER BY insert_time DESC LIMIT 100";
+                  "FROM tb_condition_orders "
+                  "WHERE insert_time >= NOW() - INTERVAL '24 hours' "
+                  "ORDER BY insert_time ASC";
         }
 
         pqxx::result r = txn.exec(sql);
@@ -451,12 +454,15 @@ std::vector<CThostFtdcOrderField> DBManager::loadOrders(const std::string& tradi
         c.set_client_encoding("GB18030"); // Ensure retrieved data is GBK to match CTP behavior for Publisher
         pqxx::work txn(c);
         
-        // 加载最近的委托，不严格匹配日期，防止夜盘/SimNow日期不一致导致看不到单子
+        // 加载最近的委托，改为 ASC 顺序，配合前端 insert(0) 逻辑，使启动后最新的在最上面
+        // 增加日期过滤，只加载当天的委托
         std::string sql = "SELECT instrument_id, direction, offset_flag, limit_price, "
                           "volume_total_original, volume_traded, volume_total, "
                           "order_status, status_msg, "
                           "order_ref, front_id, session_id, exchange_id, insert_date, insert_time, broker_id "
-                          "FROM tb_orders ORDER BY insert_date DESC, insert_time DESC LIMIT 1000";
+                          "FROM tb_orders WHERE (insert_date = " + txn.quote(trading_day) + 
+                          " OR insert_date = '' OR insert_date IS NULL) "
+                          "ORDER BY insert_date ASC, insert_time ASC LIMIT 1000";
         
         pqxx::result r = txn.exec(sql);
         std::cout << "[DB] loadOrders sql result size: " << r.size() << std::endl;
@@ -499,8 +505,8 @@ std::vector<CThostFtdcOrderField> DBManager::loadOrders(const std::string& tradi
     return list;
 }
 
-std::vector<CThostFtdcTradeField> DBManager::loadTrades(const std::string& trading_day) {
-    std::vector<CThostFtdcTradeField> list;
+std::vector<TradeData> DBManager::loadTrades(const std::string& trading_day) {
+    std::vector<TradeData> list;
     if (connStr_.empty()) return list;
 
     try {
@@ -509,28 +515,78 @@ std::vector<CThostFtdcTradeField> DBManager::loadTrades(const std::string& tradi
         pqxx::work txn(c);
 
         std::string sql = "SELECT instrument_id, direction, offset_flag, price, volume, "
-                          "trade_id, order_ref, exchange_id, trade_date, trade_time, broker_id "
-                          "FROM tb_trades ORDER BY trade_date DESC, trade_time DESC LIMIT 1000";
+                          "trade_id, order_ref, exchange_id, trade_date, trade_time, broker_id, "
+                          "commission, close_profit, strategy_id "
+                          "FROM tb_trades ORDER BY trade_date ASC, trade_time ASC LIMIT 1000";
 
         pqxx::result r = txn.exec(sql);
         for (auto row : r) {
-            CThostFtdcTradeField t = {};
-            std::strncpy(t.InstrumentID, row[0].c_str(), sizeof(t.InstrumentID) - 1);
-            t.Direction = row[1].c_str()[0];
-            t.OffsetFlag = row[2].c_str()[0];
-            t.Price = row[3].as<double>();
-            t.Volume = row[4].as<int>();
-            std::strncpy(t.TradeID, row[5].c_str(), sizeof(t.TradeID) - 1);
-            std::strncpy(t.OrderRef, row[6].c_str(), sizeof(t.OrderRef) - 1);
-            std::strncpy(t.ExchangeID, row[7].c_str(), sizeof(t.ExchangeID) - 1);
-            std::strncpy(t.TradeDate, row[8].c_str(), sizeof(t.TradeDate) - 1);
-            std::strncpy(t.TradeTime, row[9].c_str(), sizeof(t.TradeTime) - 1);
-            if (!row[10].is_null()) std::strncpy(t.BrokerID, row[10].c_str(), sizeof(t.BrokerID) - 1);
+            TradeData t = {};
+            std::memset(&t, 0, sizeof(t));
+
+            std::strncpy(t.instrument_id, row[0].c_str(), sizeof(t.instrument_id) - 1);
+            t.direction = row[1].c_str()[0];
+            t.offset_flag = row[2].c_str()[0];
+            t.price = row[3].as<double>();
+            t.volume = row[4].as<int>();
+            std::strncpy(t.trade_id, row[5].c_str(), sizeof(t.trade_id) - 1);
+            std::strncpy(t.order_ref, row[6].c_str(), sizeof(t.order_ref) - 1);
+            std::strncpy(t.exchange_id, row[7].c_str(), sizeof(t.exchange_id) - 1);
+            std::strncpy(t.trade_date, row[8].c_str(), sizeof(t.trade_date) - 1);
+            std::strncpy(t.trade_time, row[9].c_str(), sizeof(t.trade_time) - 1);
+            
+            // Extended fields
+            if (!row[11].is_null()) t.commission = row[11].as<double>();
+            if (!row[12].is_null()) t.close_profit = row[12].as<double>();
+            if (!row[13].is_null()) std::strncpy(t.strategy_id, row[13].c_str(), sizeof(t.strategy_id) - 1);
 
             list.push_back(t);
         }
     } catch (const std::exception& e) {
         std::cerr << "[DB] loadTrades Error: " << e.what() << std::endl;
+    }
+    return list;
+}
+
+std::vector<TradeData> DBManager::loadAllTradesAsc() {
+    std::vector<TradeData> list;
+    if (connStr_.empty()) return list;
+
+    try {
+        pqxx::connection c(connStr_);
+        c.set_client_encoding("GB18030");
+        pqxx::work txn(c);
+
+        // 加载全部历史成交用于重放状态
+        std::string sql = "SELECT instrument_id, direction, offset_flag, price, volume, "
+                          "trade_id, order_ref, exchange_id, trade_date, trade_time, broker_id, "
+                          "commission, close_profit, strategy_id "
+                          "FROM tb_trades ORDER BY trade_date ASC, trade_time ASC";
+
+        pqxx::result r = txn.exec(sql);
+        for (auto row : r) {
+            TradeData t = {};
+            std::memset(&t, 0, sizeof(t));
+
+            std::strncpy(t.instrument_id, row[0].c_str(), sizeof(t.instrument_id) - 1);
+            if (!row[1].is_null()) t.direction = row[1].c_str()[0];
+            if (!row[2].is_null()) t.offset_flag = row[2].c_str()[0];
+            t.price = row[3].as<double>();
+            t.volume = row[4].as<int>();
+            if (!row[5].is_null()) std::strncpy(t.trade_id, row[5].c_str(), sizeof(t.trade_id) - 1);
+            if (!row[6].is_null()) std::strncpy(t.order_ref, row[6].c_str(), sizeof(t.order_ref) - 1);
+            if (!row[7].is_null()) std::strncpy(t.exchange_id, row[7].c_str(), sizeof(t.exchange_id) - 1);
+            if (!row[8].is_null()) std::strncpy(t.trade_date, row[8].c_str(), sizeof(t.trade_date) - 1);
+            if (!row[9].is_null()) std::strncpy(t.trade_time, row[9].c_str(), sizeof(t.trade_time) - 1);
+            
+            if (!row[11].is_null()) t.commission = row[11].as<double>();
+            if (!row[12].is_null()) t.close_profit = row[12].as<double>();
+            if (!row[13].is_null()) std::strncpy(t.strategy_id, row[13].c_str(), sizeof(t.strategy_id) - 1);
+
+            list.push_back(t);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] loadAllTradesAsc Error: " << e.what() << std::endl;
     }
     return list;
 }

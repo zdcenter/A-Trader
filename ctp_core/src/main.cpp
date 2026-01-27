@@ -131,8 +131,26 @@ int main() {
         std::string id = req["id"];
         double price = req["price"];
         int vol = req["vol"];
-        // 简单示例只买开，后续需完善解析 dir/offset
-        td_handler.insertOrder(id, price, vol, THOST_FTDC_D_Buy, THOST_FTDC_OF_Open);
+        
+        // 解析 Direction
+        char dir = THOST_FTDC_D_Buy;
+        if (req.contains("dir")) {
+            std::string d = req["dir"];
+            // 前端可能传 "SELL" 或 "1"
+            if (d == "SELL" || d == "1") dir = THOST_FTDC_D_Sell;
+        }
+
+        // 解析 Offset
+        char off = THOST_FTDC_OF_Open;
+        if (req.contains("off")) {
+            std::string o = req["off"];
+            // 前端可能传 "CLOSE", "CLOSETODAY", "1", "3" 等
+            if (o == "CLOSE" || o == "1") off = THOST_FTDC_OF_Close;
+            else if (o == "CLOSETODAY" || o == "3") off = THOST_FTDC_OF_CloseToday;
+            else if (o == "CLOSEYESTERDAY" || o == "4") off = THOST_FTDC_OF_CloseYesterday; // CTP usually auto handles yesterday via Close, but SHFE needs explicit sometimes if we want CloseYesterday
+        }
+        
+        td_handler.insertOrder(id, price, vol, dir, off);
         return "{\"status\":\"ok\",\"msg\":\"Order sent to CTP\"}";
     };
     

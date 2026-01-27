@@ -75,7 +75,8 @@ public:
     
     // Data Recovery
     std::vector<CThostFtdcOrderField> loadOrders(const std::string& trading_day);
-    std::vector<CThostFtdcTradeField> loadTrades(const std::string& trading_day);
+    std::vector<TradeData> loadTrades(const std::string& trading_day);
+    std::vector<TradeData> loadAllTradesAsc(); // Added Ascending for Replay
 
     // Strategy Management
     std::vector<std::pair<std::string, std::string>> loadStrategies();

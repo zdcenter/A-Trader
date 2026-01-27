@@ -93,32 +93,49 @@ void PositionModel::updatePosition(const QString& json) {
             if(j.contains("yd_position")) d.yd_position = j["yd_position"]; else d.yd_position = j["yd"];
             if(j.contains("position_cost")) d.position_cost = j["position_cost"]; else d.position_cost = j["cost"];
             
-            calculateProfit(_position_data[row]);
-            emit dataChanged(index(row), index(row));
+            // 如果持仓量 <= 0，从列表中删除
+            if (d.position <= 0) {
+                 beginRemoveRows(QModelIndex(), row, row);
+                 _position_data.removeAt(row);
+                 endRemoveRows();
+                 
+                 // 重建索引映射 (因为删除中间行会导致后续行号变化)
+                 _instrument_to_indices.clear();
+                 for(int i=0; i<_position_data.size(); ++i) {
+                     _instrument_to_indices[QString::fromUtf8(_position_data[i].data.instrument_id)].append(i);
+                 }
+            } else {
+                 calculateProfit(_position_data[row]);
+                 emit dataChanged(index(row), index(row));
+            }
         } else {
-            // Insert new
-            beginInsertRows(QModelIndex(), _position_data.count(), _position_data.count());
+            // Insert new (only if pos > 0)
+            int pos = 0;
+            if(j.contains("position")) pos = j["position"]; else pos = j["pos"];
             
-            PositionItem item;
-            // Only zero out the POD data part
-            std::memset(&item.data, 0, sizeof(item.data));
-            
-            // Set ID
-            item.instrumentId = id;
-            strncpy(item.data.instrument_id, id.toStdString().c_str(), sizeof(item.data.instrument_id)-1);
-            
-            item.data.direction = dir;
-            if(j.contains("position")) item.data.position = j["position"]; else item.data.position = j["pos"];
-            if(j.contains("today_position")) item.data.today_position = j["today_position"]; else item.data.today_position = j["td"];
-            if(j.contains("yd_position")) item.data.yd_position = j["yd_position"]; else item.data.yd_position = j["yd"];
-            if(j.contains("position_cost")) item.data.position_cost = j["position_cost"]; else item.data.position_cost = j["cost"];
-            
-            item.lastPrice = 0.0;
-            item.profit = 0.0;
-            
-            _position_data.append(item);
-            _instrument_to_indices[id].append(_position_data.count() - 1);
-            endInsertRows();
+            if (pos > 0) {
+                beginInsertRows(QModelIndex(), _position_data.count(), _position_data.count());
+                
+                PositionItem item;
+                // ... (rest of insert logic)
+                std::memset(&item.data, 0, sizeof(item.data));
+                item.instrumentId = id;
+                strncpy(item.data.instrument_id, id.toStdString().c_str(), sizeof(item.data.instrument_id)-1);
+                item.data.direction = dir;
+                item.data.position = pos;
+                
+                if(j.contains("today_position")) item.data.today_position = j["today_position"]; else item.data.today_position = j["td"];
+                if(j.contains("yd_position")) item.data.yd_position = j["yd_position"]; else item.data.yd_position = j["yd"];
+                if(j.contains("position_cost")) item.data.position_cost = j["position_cost"]; else item.data.position_cost = j["cost"];
+                
+                item.lastPrice = 0.0;
+                item.profit = 0.0;
+                
+                _position_data.append(item);
+                // Re-add to index (actually append is safe, but rebuilding is safer if we mix logic)
+                 _instrument_to_indices[id].append(_position_data.count() - 1);
+                endInsertRows();
+            }
         }
     } catch (...) {}
 }

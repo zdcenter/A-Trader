@@ -135,6 +135,16 @@ Item {
                 
                 MouseArea {
                     anchors.fill: parent
+                    
+                    // 防误触/重复提交标志
+                    property bool processing: false
+                    
+                    Timer {
+                        id: resetTimer
+                        interval: 1000 // 1秒防抖
+                        onTriggered: parent.processing = false
+                    }
+
                     onClicked: {
                         if (orderController) {
                             orderController.instrumentId = model.instrumentId
@@ -145,6 +155,48 @@ Item {
                             orderController.subscribe(model.instrumentId)
                             // 自动填入本次持仓的手数
                             orderController.volume = model.position
+                        }
+                    }
+                    onDoubleClicked: {
+                        if (processing) return; // 防止连点
+                        processing = true;
+                        resetTimer.start();
+
+                        if (orderController) {
+                            orderController.instrumentId = model.instrumentId
+                            orderController.price = model.lastPrice // 双击全平使用最新价
+                            orderController.subscribe(model.instrumentId)
+                            
+                            // 1. 确定平仓方向 (持仓的反向)
+                            var actionDir = (model.direction === "BUY") ? "SELL" : "BUY"
+                            
+                            // 2. 判定是否为上期所/能源中心合约 (需区分平今/平昨)
+                            var id = model.instrumentId.toLowerCase()
+                            var prefix = id.replace(/[0-9]+/, "")
+                            var shfePrefixes = ["cu","al","zn","pb","ni","sn","au","ag","rb","wr","hc","fu","bu","ru","sp","sc","nr","lu","bc","br","ec"]
+                            var isShfe = shfePrefixes.indexOf(prefix) !== -1
+                            
+                            console.log("[QuickClose] DoubleClick: " + model.instrumentId + " Dir:" + actionDir + " IsShfe:" + isShfe)
+                            
+                            if (isShfe) {
+                                // 上期所优先平今
+                                if (model.todayPosition > 0) {
+                                    orderController.volume = model.todayPosition
+                                    orderController.sendOrder(actionDir, "CLOSETODAY")
+                                    console.log(" -> CloseToday Vol:" + model.todayPosition)
+                                }
+                                // 再平昨
+                                if (model.ydPosition > 0) {
+                                    orderController.volume = model.ydPosition
+                                    orderController.sendOrder(actionDir, "CLOSE")
+                                    console.log(" -> CloseYesterday Vol:" + model.ydPosition)
+                                }
+                            } else {
+                                // 其他交易所直接平仓
+                                orderController.volume = model.position
+                                orderController.sendOrder(actionDir, "CLOSE")
+                                console.log(" -> Close Vol:" + model.position)
+                            }
                         }
                     }
                 }

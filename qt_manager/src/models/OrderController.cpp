@@ -474,7 +474,7 @@ void OrderController::onConditionOrderReturn(const QString& json) {
             }
         }
         
-        if (!found && newStatus == 0) {
+        if (!found) { // Allow triggered/cancelled orders to be loaded too
             // New Order
             QVariantMap map;
             map["request_id"] = reqIdStr;

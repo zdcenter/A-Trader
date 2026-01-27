@@ -7,8 +7,11 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
+#include <filesystem>
 #include <iostream>
 #include <map>
+#include <chrono>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -16,6 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <algorithm>
 
 namespace atrad {
 
@@ -38,6 +42,7 @@ public:
     void qryInstrument(const std::string& instrument_id);
     void qryMarginRate(const std::string& instrument_id);
     void qryCommissionRate(const std::string& instrument_id);
+    void qryPositionDetail(); // 查询持仓明细（用于FIFO匹配）
 
     // 下单接口
     int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id = "");
@@ -57,6 +62,7 @@ public:
     void OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnRspQryInstrumentMarginRate(CThostFtdcInstrumentMarginRateField *pInstrumentMarginRate, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommissionRateField *pInstrumentCommissionRate, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
+    void OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDetailField *pInvestorPositionDetail, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
 
     // 报单成交回报
     void OnRtnOrder(CThostFtdcOrderField *pOrder) override;
@@ -91,7 +97,16 @@ private:
     int front_id_ = 0;
     int session_id_ = 0;
     std::string current_trading_day_; // Added
-    std::atomic<int> next_order_ref_{1};
+    // Removed duplicates
+    
+    // Order Ref Management
+    std::string last_ref_time_str_;
+    std::atomic<int> order_ref_seq_{0};
+    std::mutex ref_mtx_;
+    
+    // High performance cache
+    long long cached_second_ = 0;       // 缓存的秒时间戳
+    char cached_ref_prefix_[10] = {0};  // 缓存的 "DDHHMMSS" 字符串
 
     // 缓存 (恢复)
     std::map<std::string, InstrumentData> instrument_cache_;
@@ -118,7 +133,7 @@ private:
     
     // Day Orders/Trades Cache
     std::vector<CThostFtdcOrderField> order_cache_;
-    std::vector<CThostFtdcTradeField> trade_cache_;
+    std::vector<TradeData> trade_cache_;
 
 public:
     // 推送所有缓存的持仓和资金
@@ -132,10 +147,17 @@ public:
 
     void loadInstrumentsFromDB(); // Added
     void loadDayOrdersFromDB(); // Added
+    void restorePositionDetails(); // Added
     void syncSubscribedInstruments(); // Added
 
     // Helper for Strategy
     bool getInstrumentData(const std::string& id, InstrumentData& out_data);
+
+private:
+    // 开仓明细队列 (使用共享结构，便于后续可能的前端展示)
+    // Key: InstrumentID_Direction (e.g. "rb2505_0" for Long, "rb2505_1" for Short)
+    std::map<std::string, std::deque<PositionDetailData>> open_position_queues_;
+    std::mutex position_detail_mtx_;
 };
 
 } // namespace atrad

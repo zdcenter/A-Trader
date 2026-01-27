@@ -71,6 +71,44 @@ struct PositionData {
     double pos_profit;     // 持仓盈亏
 };
 
+// 逐笔持仓明细数据 (对应 CThostFtdcInvestorPositionDetailField)
+struct PositionDetailData {
+    char trade_id[64];           // 原始开仓成交号
+    char instrument_id[64];      // 合约代码
+    char exchange_id[16];        // 交易所代码
+    char direction;              // 持仓方向: '0' Buy/Long, '1' Sell/Short
+    double open_price;           // 开仓价格
+    int volume;                  // 剩余持仓量
+    char open_date[16];          // 开仓日期
+    double margin;               // 占用保证金
+    double settlement_price;     // 昨结算价 (用于计算逐日盯市盈亏)
+    double close_profit_by_date; // 逐日盯市平仓盈亏
+    double close_profit_by_trade;// 逐笔对冲平仓盈亏
+    double position_profit_by_date;  // 逐日盯市持仓盈亏
+    double position_profit_by_trade; // 逐笔对冲持仓盈亏
+};
+
+// 成交数据 (扩展版，包含 CTP 原始数据 + 分析数据)
+struct TradeData {
+    // CTP Fields
+    char instrument_id[64];
+    char trade_id[64];
+    char order_ref[13]; // CTP is 13
+    char exchange_id[16];
+    char trade_date[16];
+    char trade_time[16];
+    char direction;        // '0' Buy, '1' Sell
+    char offset_flag;      // '0' Open, '1' Close, etc.
+    double price;
+    int volume;
+    char order_sys_id[64]; // Added for completeness
+
+    // Extended Fields
+    double commission;     // 手续费
+    double close_profit;   // 平仓盈亏
+    char strategy_id[32];  // 策略ID
+};
+
 // 账户资金数据
 struct AccountData {
     double balance;        // 总权益

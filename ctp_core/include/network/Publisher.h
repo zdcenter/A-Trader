@@ -49,6 +49,7 @@ public:
      * @brief 发送成交换单
      */
     void publishTrade(const CThostFtdcTradeField* pTrade, double commission = 0.0, double close_profit = 0.0);
+    void publishTrade(const TradeData& data);
 
     /**
      * @brief 发送通用消息 (Topic + Message)
