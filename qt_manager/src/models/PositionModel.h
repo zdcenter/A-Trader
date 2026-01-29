@@ -29,7 +29,8 @@ public:
         CostRole,
         ProfitRole,
         LastPriceRole,
-        AvgPriceRole
+        AvgPriceRole,
+        ExchangeRole
     };
 
     explicit PositionModel(QObject *parent = nullptr);

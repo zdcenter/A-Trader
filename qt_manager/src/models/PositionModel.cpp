@@ -40,6 +40,15 @@ QVariant PositionModel::data(const QModelIndex &index, int role) const {
              }
              return "0.00";
         }
+        case ExchangeRole: {
+             QString exId = QString::fromUtf8(item.data.exchange_id);
+             if (!exId.isEmpty()) return exId;
+             
+             if (_instrument_dict.contains(item.instrumentId)) {
+                 return QString::fromUtf8(_instrument_dict[item.instrumentId].exchange_id);
+             }
+             return "";
+        }
         default: return QVariant();
     }
 }
@@ -55,6 +64,7 @@ QHash<int, QByteArray> PositionModel::roleNames() const {
     roles[ProfitRole] = "profit";
     roles[LastPriceRole] = "lastPrice";
     roles[AvgPriceRole] = "avgPrice";
+    roles[ExchangeRole] = "exchangeId";
     return roles;
 }
 
@@ -92,6 +102,10 @@ void PositionModel::updatePosition(const QString& json) {
             if(j.contains("today_position")) d.today_position = j["today_position"]; else d.today_position = j["td"];
             if(j.contains("yd_position")) d.yd_position = j["yd_position"]; else d.yd_position = j["yd"];
             if(j.contains("position_cost")) d.position_cost = j["position_cost"]; else d.position_cost = j["cost"];
+            if(j.contains("exchange_id")) {
+                std::string s = j["exchange_id"];
+                strncpy(d.exchange_id, s.c_str(), sizeof(d.exchange_id)-1);
+            }
             
             // 如果持仓量 <= 0，从列表中删除
             if (d.position <= 0) {
@@ -127,6 +141,10 @@ void PositionModel::updatePosition(const QString& json) {
                 if(j.contains("today_position")) item.data.today_position = j["today_position"]; else item.data.today_position = j["td"];
                 if(j.contains("yd_position")) item.data.yd_position = j["yd_position"]; else item.data.yd_position = j["yd"];
                 if(j.contains("position_cost")) item.data.position_cost = j["position_cost"]; else item.data.position_cost = j["cost"];
+                if(j.contains("exchange_id")) {
+                    std::string s = j["exchange_id"];
+                    strncpy(item.data.exchange_id, s.c_str(), sizeof(item.data.exchange_id)-1);
+                }
                 
                 item.lastPrice = 0.0;
                 item.profit = 0.0;
@@ -188,6 +206,10 @@ void PositionModel::updateInstrument(const QString& json) {
         if(j.contains("instrument_name")) {
              std::string name = j["instrument_name"];
              strncpy(info.instrument_name, name.c_str(), sizeof(info.instrument_name)-1);
+        }
+        if(j.contains("exchange_id")) {
+             std::string ex = j["exchange_id"];
+             strncpy(info.exchange_id, ex.c_str(), sizeof(info.exchange_id)-1);
         }
 
         if(j.contains("volume_multiple")) info.volume_multiple = j["volume_multiple"];

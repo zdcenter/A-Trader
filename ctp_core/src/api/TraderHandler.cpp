@@ -223,6 +223,7 @@ void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pP
     if (pPos && pPos->Position > 0) {
         PositionData data;
         std::strncpy(data.instrument_id, pPos->InstrumentID, sizeof(data.instrument_id));
+        std::strncpy(data.exchange_id, pPos->ExchangeID, sizeof(data.exchange_id)); // Added
         data.direction = pPos->PosiDirection;
         data.position = pPos->Position;
         data.today_position = pPos->TodayPosition;

@@ -63,6 +63,7 @@ struct TickData {
 // 持仓数据
 struct PositionData {
     char instrument_id[64];
+    char exchange_id[16];   // 交易所代码
     char direction;        // '0' 多, '1' 空
     int position;          // 总持仓
     int today_position;    // 今仓
