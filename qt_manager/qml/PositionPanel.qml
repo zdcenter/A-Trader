@@ -8,8 +8,28 @@ import QtQuick.Layouts
  * - 显示当前持仓列表
  * - 显示持仓的盈亏、成本、现价等信息
  */
-Item {
+FocusScope {
     id: root
+    
+    // 激活状态样式
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.color: root.activeFocus ? "#2196f3" : "transparent"
+        border.width: root.activeFocus ? 2 : 0
+        z: 100
+    }
+    
+    // 点击任意位置获取焦点(穿透)
+    MouseArea {
+        anchors.fill: parent
+        z: 99
+        propagateComposedEvents: true
+        onPressed: (mouse)=> {
+            root.forceActiveFocus()
+            mouse.accepted = false
+        }
+    }
     
     // 对外暴露的属性
     property var positionModel
@@ -26,9 +46,10 @@ Item {
             color: "#2d2d30"
             
             Text {
-                text: "  💼 当前持仓"
+                text: "  💼 持仓记录"
                 color: "#cccccc"
                 font.pixelSize: 13
+                font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -58,6 +79,7 @@ Item {
             Layout.fillHeight: true
             model: root.positionModel
             clip: true
+            ScrollBar.vertical: ScrollBar {}
             
             delegate: Rectangle {
                 width: parent.width

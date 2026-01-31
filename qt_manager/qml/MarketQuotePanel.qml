@@ -11,7 +11,7 @@ import Qt.labs.settings 1.0
  * - 丰富的数据展示（涨跌、买卖价等）
  * - 配置持久化（列顺序、可见性、订阅列表）
  */
-Item {
+FocusScope {
     id: root
     
     // 对外暴露的属性
@@ -395,6 +395,9 @@ Item {
                         property int dragStartIndex: -1
                         
                         onPressed: {
+                            // 抢占焦点
+                            root.forceActiveFocus()
+                            
                             dragStartIndex = index
                             dragItem.x = parent.mapToItem(headerView, 0, 0).x
                             dragItem.text = model.title
@@ -548,6 +551,9 @@ Item {
                         drag.threshold: 10
                         
                         onPressed: function(mouse) {
+                            // 抢占焦点
+                            root.forceActiveFocus()
+                            
                             if (mouse.button === Qt.LeftButton) {
                                 // 准备拖拽
                                 var posInList = parent.mapToItem(marketListView, 0, 0)

@@ -213,19 +213,39 @@ void OrderController::recalculate() {
     emit calculationChanged();
 }
 
-void OrderController::sendOrder(const QString& direction, const QString& offset) {
+
+
+void OrderController::sendOrder(const QString& direction, const QString& offset, const QString& priceType) {
     if (_instrumentId.isEmpty() || _volume <= 0) return;
 
     nlohmann::json j;
     j["type"] = atrad::CmdType::Order;
     j["id"] = _instrumentId.toStdString();
-    j["price"] = _price;
+    
+    // Map Direction
+    if (direction == "BUY") j["dir"] = "0"; // CTP Buy
+    else if (direction == "SELL") j["dir"] = "1"; // CTP Sell
+    else j["dir"] = direction.toStdString();
+    
+    // Map Offset
+    if (offset == "OPEN") j["off"] = "0"; // CTP Open
+    else if (offset == "CLOSE") j["off"] = "1"; // CTP Close
+    else if (offset == "CLOSETODAY") j["off"] = "3"; // CTP CloseToday
+    else j["off"] = offset.toStdString();
+
+    // Map Price Type & Price
+    if (priceType == "MARKET") {
+        j["price_type"] = "1"; // CTP AnyPrice
+        j["price"] = 0.0;
+    } else {
+        j["price_type"] = "2"; // CTP LimitPrice
+        j["price"] = _price;
+    }
+
     j["vol"] = _volume;
-    j["dir"] = direction.toStdString();
-    j["off"] = offset.toStdString();
 
     emit orderSent(QString::fromStdString(j.dump()));
-    qDebug() << "Order Published:" << _instrumentId << direction << offset;
+    qDebug() << "Order Published:" << _instrumentId << direction << offset << priceType;
 }
 
 void OrderController::cancelOrder(const QString& instrumentId, const QString& orderSysId, const QString& orderRef, const QString& exchangeId, int frontId, int sessionId) {

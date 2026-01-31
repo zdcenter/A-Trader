@@ -18,6 +18,13 @@ Rectangle {
     
     color: "#252526"
     
+    // 点击背景抢占焦点 (取消其他面板的高亮)
+    MouseArea {
+        anchors.fill: parent
+        z: -1
+        onPressed: root.forceActiveFocus()
+    }
+    
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
@@ -198,13 +205,51 @@ Rectangle {
                 
                 // 价格输入
                 Column {
-                    Layout.preferredWidth: 140 // 限制宽度，不再铺满
+                    Layout.preferredWidth: 140 
                     spacing: 4
                     
-                    Text {
-                        text: "价格"
-                        color: "#888888"
-                        font.pixelSize: 11
+                    RowLayout {
+                        spacing: 10
+                        Text {
+                            text: "价格"
+                            color: "#888888"
+                            font.pixelSize: 11
+                        }
+                        
+                        // 市价单复选框
+                        CheckBox {
+                            id: marketPriceCheck
+                            text: "市价"
+                            font.pixelSize: 11
+                            checked: false
+                            height: 16
+                            padding: 0
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: parent.checked ? "#4ec9b0" : "#888888"
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: parent.indicator.width + 4
+                            }
+                            
+                            indicator: Rectangle {
+                                implicitWidth: 14; implicitHeight: 14
+                                x: parent.leftPadding
+                                y: parent.height / 2 - height / 2
+                                radius: 3
+                                color: "transparent"
+                                border.color: parent.checked ? "#4ec9b0" : "#666666"
+                                
+                                Rectangle {
+                                    width: 8; height: 8
+                                    x: 3; y: 3
+                                    radius: 2
+                                    color: "#4ec9b0"
+                                    visible: parent.parent.checked
+                                }
+                            }
+                        }
                     }
                     
                     RowLayout {
@@ -216,7 +261,11 @@ Rectangle {
                             id: priceInput
                             Layout.fillWidth: true
                             height: 36
+                            
+                            // 如果是市价单，禁用输入框并显示 "市价"
+                            enabled: !marketPriceCheck.checked
                             text: {
+                                if (marketPriceCheck.checked) return "市价下单"
                                 if (!orderController) return ""
                                 return orderController.price > 0 ? orderController.price.toString() : ""
                             }
@@ -237,9 +286,10 @@ Rectangle {
                             }
                             
                             background: Rectangle {
-                                color: "#2a2a2a"
+                                color: marketPriceCheck.checked ? "#333333" : "#2a2a2a"
                                 radius: 4
                                 border.color: {
+                                    if (marketPriceCheck.checked) return "#333333"
                                     if (!orderController) return "#444444"
                                     return orderController.isAutoPrice ? "#4caf50" : "#444444"
                                 }
@@ -247,13 +297,42 @@ Rectangle {
                             }
                             
                             color: {
+                                if (marketPriceCheck.checked) return "#aaaaaa"
                                 if (!orderController) return "white"
                                 return orderController.isAutoPrice ? "#4caf50" : "white"
+                            }
+                            
+                            // 右侧添加 "自动" 按钮 (当处于手动模式或自动模式时都显示，点击重置)
+                            // 仅当非市价模式显示
+
+                            
+                            Text {
+                                text: "A"
+                                visible: !marketPriceCheck.checked && orderController && !orderController.isAutoPrice
+                                color: "#4caf50"
+                                font.bold: true
+                                font.pixelSize: 12
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (orderController) {
+                                            orderController.setManualPrice(false)
+                                            // 强制触发一次重刷
+                                            priceInput.focus = false
+                                        }
+                                    }
+                                }
                             }
                         }
                         
                         // 垂直微调按钮 (上下箭头)
                         Column {
+                            visible: !marketPriceCheck.checked
                             Layout.preferredWidth: 24
                             Layout.fillHeight: true
                             spacing: 0
@@ -279,7 +358,10 @@ Rectangle {
                                     onClicked: {
                                         if (orderController) {
                                             var tick = orderController.priceTick
-                                            var p = orderController.price + tick
+                                            var val = parseFloat(priceInput.text)
+                                            if (isNaN(val)) val = orderController.price
+                                            
+                                            var p = val + tick
                                             p = Math.round(p / tick) * tick
                                             orderController.setPriceOriginal(Number(p.toFixed(4)))
                                             orderController.setManualPrice(true)
@@ -309,7 +391,10 @@ Rectangle {
                                     onClicked: {
                                         if (orderController) {
                                             var tick = orderController.priceTick
-                                            var p = orderController.price - tick
+                                            var val = parseFloat(priceInput.text)
+                                            if (isNaN(val)) val = orderController.price
+                                            
+                                            var p = val - tick
                                             if (p < 0) p = 0
                                             p = Math.round(p / tick) * tick
                                             orderController.setPriceOriginal(Number(p.toFixed(4)))
@@ -448,7 +533,7 @@ Rectangle {
                 contentItem: Text {
                     text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: if(orderController) orderController.sendOrder("BUY", "OPEN")
+                onClicked: if(orderController) orderController.sendOrder("BUY", "OPEN", marketPriceCheck.checked ? "MARKET" : "LIMIT")
             }
             
             Button {
@@ -463,7 +548,7 @@ Rectangle {
                 contentItem: Text {
                     text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: if(orderController) orderController.sendOrder("SELL", "OPEN")
+                onClicked: if(orderController) orderController.sendOrder("SELL", "OPEN", marketPriceCheck.checked ? "MARKET" : "LIMIT")
             }
             
             // --- 第二行：平仓 (平昨/智能平仓) ---
@@ -480,7 +565,7 @@ Rectangle {
                 contentItem: Text {
                     text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: if(orderController) orderController.sendOrder("BUY", "CLOSE")
+                onClicked: if(orderController) orderController.sendOrder("BUY", "CLOSE", marketPriceCheck.checked ? "MARKET" : "LIMIT")
             }
             
             Button {
@@ -496,7 +581,7 @@ Rectangle {
                 contentItem: Text {
                     text: parent.text; color: parent.enabled ? "white" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: if(orderController) orderController.sendOrder("SELL", "CLOSE")
+                onClicked: if(orderController) orderController.sendOrder("SELL", "CLOSE", marketPriceCheck.checked ? "MARKET" : "LIMIT")
             }
             
             // --- 第三行：平今仓 (上期所专用) ---
@@ -514,7 +599,7 @@ Rectangle {
                 contentItem: Text {
                     text: parent.text; color: parent.enabled ? "#ffcdd2" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: if(orderController) orderController.sendOrder("BUY", "CLOSETODAY")
+                onClicked: if(orderController) orderController.sendOrder("BUY", "CLOSETODAY", marketPriceCheck.checked ? "MARKET" : "LIMIT")
             }
             
             Button {
@@ -531,7 +616,7 @@ Rectangle {
                 contentItem: Text {
                     text: parent.text; color: parent.enabled ? "#c8e6c9" : "#aaaaaa"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: if(orderController) orderController.sendOrder("SELL", "CLOSETODAY")
+                onClicked: if(orderController) orderController.sendOrder("SELL", "CLOSETODAY", marketPriceCheck.checked ? "MARKET" : "LIMIT")
             }
         }
         

@@ -7,16 +7,54 @@ import QtQuick.Layouts
  * 显示所有报单状态
  * 布局重构：对标专业交易终端
  */
-Item {
+FocusScope {
     id: root
+    
+    // 激活状态样式
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.color: root.activeFocus ? "#2196f3" : "transparent"
+        border.width: root.activeFocus ? 2 : 0
+        z: 100
+    }
+    
+    // 点击任意位置获取焦点(穿透)
+    MouseArea {
+        anchors.fill: parent
+        z: 99
+        propagateComposedEvents: true
+        onPressed: (mouse)=> {
+            root.forceActiveFocus()
+            mouse.accepted = false
+        }
+    }
     
     // 对外暴露的属性
     property var orderModel
     property var orderController
     
+    // Module title (optional if used as standalone)
+    property string title: "委托记录"
+    
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+        
+        // Module Header
+        Rectangle {
+            Layout.fillWidth: true
+            height: 30
+            color: "#2d2d30"
+            
+            Text {
+                text: "  📓 委托记录"
+                color: "#cccccc"
+                font.pixelSize: 13
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
         
         // 表头 (匹配专业终端布局)
         Rectangle {
@@ -28,19 +66,28 @@ Item {
                 anchors.fill: parent
                 spacing: 0
                 
-                // 总宽度 100%
+                // 1. 报单编号 (10%)
                 Text { width: parent.width * 0.10; text: "报单编号"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.08; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.04; text: "买卖"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.04; text: "开平"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 2. 合约 (10%)
+                Text { width: parent.width * 0.10; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 3. 买卖 (5%)
+                Text { width: parent.width * 0.05; text: "买卖"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 4. 开平 (5%)
+                Text { width: parent.width * 0.05; text: "开平"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 5. 状态 (8%)
                 Text { width: parent.width * 0.08; text: "状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.08; text: "价格"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.06; text: "报单"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.06; text: "未成"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.06; text: "成交"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.20; text: "详细状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.10; text: "报单时间"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                Text { width: parent.width * 0.10; text: "最后成交"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 6. 价格 (10%)
+                Text { width: parent.width * 0.10; text: "价格"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 7. 报单 (6%)
+                Text { width: parent.width * 0.06; text: "报单"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 8. 未成 (6%)
+                Text { width: parent.width * 0.06; text: "未成"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 9. 成交 (6%)
+                Text { width: parent.width * 0.06; text: "成交"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 10. 详细状态 (22%)
+                Text { width: parent.width * 0.22; text: "详细状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 11. 报单时间 (12%)
+                Text { width: parent.width * 0.12; text: "报单时间"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
             }
         }
         
@@ -50,6 +97,7 @@ Item {
             Layout.fillHeight: true
             model: root.orderModel
             clip: true
+            ScrollBar.vertical: ScrollBar {}
             
             delegate: Rectangle {
                 id: orderDelegate
@@ -64,7 +112,23 @@ Item {
                 }
 
                 required property int index
-                required property var model
+                
+                // Explicitly define required properties for roles to fix scope issues
+                required property string instrumentId
+                required property string orderSysId
+                required property string direction
+                required property string offsetFlag
+                required property string status
+                required property double price
+                required property int volumeOriginal
+                required property int volumeTotal
+                required property int volumeTraded
+                required property string statusMsg
+                required property string time
+                required property string orderRef
+                required property string exchangeId
+                required property int frontId
+                required property int sessionId
                 
                 // 辅助函数
                 function getStatusColor(status) {
@@ -97,35 +161,28 @@ Item {
                 Row {
                     anchors.fill: parent
                     
-                    // 报单编号 (Consolas)
-                    Text { width: parent.width * 0.10; text: orderDelegate.model.orderSysId || "-"; color: "#cccccc"; font.family: "Consolas"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 合约
-                    Text { width: parent.width * 0.08; text: orderDelegate.model.instrumentId; color: "white"; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 买卖
-                    Text { width: parent.width * 0.04; text: getDirText(orderDelegate.model.direction); color: orderDelegate.model.direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 开平
-                    Text { 
-                        width: parent.width * 0.04; 
-                        text: getOffsetFlagText(orderDelegate.model.offsetFlag)
-                        color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter 
-                    }
-                    // 状态
-                    Text { width: parent.width * 0.08; text: getStatusText(orderDelegate.model.status); color: getStatusColor(orderDelegate.model.status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 价格
-                    Text { width: parent.width * 0.08; text: orderDelegate.model.price.toFixed(2); color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 报单 (报单手数)
-                    Text { width: parent.width * 0.06; text: orderDelegate.model.volumeOriginal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 未成 (未成交手数 = 剩余)
-                    Text { width: parent.width * 0.06; text: orderDelegate.model.volumeTotal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 成交 (成交手数)
-                    // 如果部分成交，绿色显示
-                    Text { width: parent.width * 0.06; text: orderDelegate.model.volumeTraded; color: orderDelegate.model.volumeTraded > 0 ? "#4caf50" : "#888888"; font.family: "Consolas"; font.bold: orderDelegate.model.volumeTraded > 0; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 详细状态
-                    Text { width: parent.width * 0.20; text: orderDelegate.model.statusMsg; color: "#aaaaaa"; font.pixelSize: 11; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 报单时间
-                    Text { width: parent.width * 0.10; text: orderDelegate.model.time; color: "#cccccc"; font.family: "Consolas"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 最后成交 (暂无)
-                    Text { width: parent.width * 0.10; text: "-"; color: "#666666"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    // 1. 报单编号 (10%)
+                    Text { width: parent.width * 0.10; text: model.orderSysId || "-"; color: "#cccccc"; font.family: "Consolas"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight }
+                    // 2. 合约 (10%)
+                    Text { width: parent.width * 0.10; text: model.instrumentId; color: "#4ec9b0"; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    // 3. 买卖 (5%)
+                    Text { width: parent.width * 0.05; text: getDirText(model.direction); color: model.direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    // 4. 开平 (5%)
+                    Text { width: parent.width * 0.05; text: getOffsetFlagText(model.offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    // 5. 状态 (8%)
+                    Text { width: parent.width * 0.08; text: getStatusText(model.status); color: getStatusColor(model.status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    // 6. 价格 (10%)
+                    Text { width: parent.width * 0.10; text: model.price.toFixed(2); color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    // 7. 报单 (6%)
+                    Text { width: parent.width * 0.06; text: model.volumeOriginal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    // 8. 未成 (6%)
+                    Text { width: parent.width * 0.06; text: model.volumeTotal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    // 9. 成交 (6%)
+                    Text { width: parent.width * 0.06; text: model.volumeTraded; color: model.volumeTraded > 0 ? "#4caf50" : "#888888"; font.family: "Consolas"; font.bold: model.volumeTraded > 0; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    // 10. 详细状态 (22%)
+                    Text { width: parent.width * 0.22; text: model.statusMsg; color: "#aaaaaa"; font.pixelSize: 11; elide: Text.ElideRight; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    // 11. 报单时间 (12%)
+                    Text { width: parent.width * 0.12; text: model.time; color: "#cccccc"; font.family: "Consolas"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                 }
 
                 MouseArea {
@@ -134,23 +191,23 @@ Item {
                     hoverEnabled: true 
                     
                     onClicked: {
-                        ListView.view.currentIndex = orderDelegate.index
+                        ListView.view.currentIndex = index
                         if(root.orderController) {
-                            root.orderController.instrumentId = orderDelegate.model.instrumentId
+                            root.orderController.instrumentId = instrumentId
                         }
                     }
                     onDoubleClicked: {
                          // 双击撤单逻辑
-                         var s = orderDelegate.model.status;
+                         var s = status;
                          if (s !== "0" && s !== "5") { 
                              if (root.orderController) {
                                  root.orderController.cancelOrder(
-                                     orderDelegate.model.instrumentId,
-                                     orderDelegate.model.orderSysId || "",
-                                     orderDelegate.model.orderRef || "",
-                                     orderDelegate.model.exchangeId || "",
-                                     orderDelegate.model.frontId || 0,
-                                     orderDelegate.model.sessionId || 0
+                                     instrumentId,
+                                     orderSysId || "",
+                                     orderRef || "",
+                                     exchangeId || "",
+                                     frontId || 0,
+                                     sessionId || 0
                                  );
                              }
                          }
