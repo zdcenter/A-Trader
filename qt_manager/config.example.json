@@ -1,0 +1,8 @@
+{
+    "connection": {
+        "server_address": "192.168.1.10",
+        "pub_port": 5555,
+        "rep_port": 5556,
+        "comment": "Windows 生产环境配置示例 - 请修改 server_address 为实际的 Linux 服务器 IP"
+    }
+}

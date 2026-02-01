@@ -234,9 +234,28 @@ void OrderController::sendOrder(const QString& direction, const QString& offset,
     else j["off"] = offset.toStdString();
 
     // Map Price Type & Price
+    // Map Price Type & Price
     if (priceType == "MARKET") {
         j["price_type"] = "1"; // CTP AnyPrice
         j["price"] = 0.0;
+    } else if (priceType == "OPPONENT") {
+        j["price_type"] = "2"; // CTP LimitPrice
+        
+        double targetPrice = _price;
+        bool isBuy = (direction == "BUY" || direction == "0" || direction == "2");
+        
+        if (isBuy) {
+            // Buying -> Ask Price
+            if (!_askPrices.isEmpty() && _askPrices[0].toDouble() > 0.0001) {
+                targetPrice = _askPrices[0].toDouble();
+            }
+        } else {
+            // Selling -> Bid Price
+            if (!_bidPrices.isEmpty() && _bidPrices[0].toDouble() > 0.0001) {
+                targetPrice = _bidPrices[0].toDouble();
+            }
+        }
+        j["price"] = targetPrice;
     } else {
         j["price_type"] = "2"; // CTP LimitPrice
         j["price"] = _price;

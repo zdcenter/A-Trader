@@ -1,6 +1,8 @@
+// qmllint disable import
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 /**
  * 成交列表面板组件 (Trade List)
@@ -71,6 +73,7 @@ FocusScope {
         
         // 列表
         ListView {
+            id: tradeListView
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: root.tradeModel
@@ -79,12 +82,13 @@ FocusScope {
             
             delegate: Rectangle {
                 id: tradeDelegate
-                width: ListView.view.width
+                width: tradeListView.width
                 height: 35
                 
                 // 选中和悬停样式
                 color: {
-                    if (ListView.isCurrentItem) return "#2c5d87"
+                    if (tradeListView.currentItem === this) return "#2c5d87" // Use currentItem check or index
+                    if (tradeListView.currentIndex === index) return "#2c5d87"
                     if (mouseArea.containsMouse) return "#3a3a3a"
                     return index % 2 === 0 ? "#1e1e1e" : "#252526"
                 }
@@ -126,7 +130,7 @@ FocusScope {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        ListView.view.currentIndex = index
+                        tradeListView.currentIndex = index
                     }
                 }
             }

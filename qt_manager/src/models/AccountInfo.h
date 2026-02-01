@@ -23,6 +23,7 @@ class AccountInfo : public QObject {
     Q_PROPERTY(double frozen READ frozen NOTIFY changed)
     Q_PROPERTY(double commission READ commission NOTIFY changed)
     Q_PROPERTY(double floatingProfit READ floatingProfit NOTIFY changed)
+    Q_PROPERTY(double closeProfit READ closeProfit NOTIFY changed)
     Q_PROPERTY(double equity READ equity NOTIFY changed)
 
 public:
@@ -35,6 +36,7 @@ public:
     double margin() const { return _data.margin; }
     double frozen() const { return _data.frozen_margin; }
     double commission() const { return _data.commission; }
+    double closeProfit() const { return _data.close_profit; }
     double floatingProfit() const { return _floating_profit; }
     double equity() const { return _data.balance + _floating_profit; }
 
@@ -57,6 +59,9 @@ public slots:
             
             if (j.contains("commission")) _data.commission = j["commission"]; 
             else _data.commission = j.value("comm", 0.0);
+
+            if (j.contains("close_profit")) _data.close_profit = j["close_profit"];
+            else _data.close_profit = j.value("close_profit", 0.0);
             
             emit changed();
         } catch (...) {}

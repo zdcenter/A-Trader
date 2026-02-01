@@ -75,8 +75,25 @@ void TradeModel::onTradeReceived(const QString& json) {
         
         if (!exists) {
             std::lock_guard<std::mutex> lock(_mutex);
-            beginInsertRows(QModelIndex(), 0, 0);
-            _trades.insert(_trades.begin(), item);
+            
+            // 保持按时间倒序排列 (最新的在前面)
+            // Comparator: 返回 true 如果 a 应该排在 b 前面 (即 a 比 b 新)
+            auto it = std::lower_bound(_trades.begin(), _trades.end(), item, [](const TradeItem& a, const TradeItem& b) {
+                int dateCmp = QString::compare(a.trade_date, b.trade_date);
+                if (dateCmp > 0) return true;
+                if (dateCmp < 0) return false;
+                
+                int timeCmp = QString::compare(a.trade_time, b.trade_time);
+                if (timeCmp > 0) return true;
+                if (timeCmp < 0) return false;
+                
+                // TradeID 降序
+                return QString::compare(a.trade_id, b.trade_id) > 0;
+            });
+            
+            int index = std::distance(_trades.begin(), it);
+            beginInsertRows(QModelIndex(), index, index);
+            _trades.insert(it, item);
             endInsertRows();
         }
 

@@ -3,6 +3,9 @@
 #include <QQmlContext>
 #include <QThread>
 #include <QDebug>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "network/ZmqWorker.h"
 #include "models/MarketModel.h"
 #include "models/PositionModel.h"
@@ -10,6 +13,7 @@
 #include "models/OrderController.h"
 #include "models/OrderModel.h"
 #include "models/TradeModel.h"
+#include "protocol/zmq_topics.h"
 
 #include <QFont>
 
@@ -20,6 +24,31 @@ int main(int argc, char *argv[]) {
     app.setOrganizationName("ATrader");
     app.setOrganizationDomain("atrader.local");
     app.setApplicationName("qt_manager");
+    
+    // 加载配置文件
+    QFile configFile("config.json");
+    if (configFile.open(QIODevice::ReadOnly)) {
+        QByteArray data = configFile.readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        QJsonObject config = doc.object();
+        
+        if (config.contains("connection")) {
+            QJsonObject conn = config["connection"].toObject();
+            QString serverAddr = conn["server_address"].toString("127.0.0.1");
+            int pubPort = conn["pub_port"].toInt(5555);
+            int repPort = conn["rep_port"].toInt(5556);
+            
+            // 配置 ZMQ 地址
+            atrad::zmq_topics::Config::instance().setServerAddress(serverAddr.toStdString());
+            atrad::zmq_topics::Config::instance().setPubPort(pubPort);
+            atrad::zmq_topics::Config::instance().setRepPort(repPort);
+            
+            qDebug() << "[Main] Loaded config: Server =" << serverAddr 
+                     << "PubPort =" << pubPort << "RepPort =" << repPort;
+        }
+    } else {
+        qDebug() << "[Main] No config.json found, using default (127.0.0.1:5555/5556)";
+    }
     
     // 设置全局字体
     QFont font("WenQuanYi Micro Hei");

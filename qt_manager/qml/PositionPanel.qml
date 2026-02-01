@@ -1,6 +1,8 @@
+// qmllint disable import
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 /**
  * 持仓面板组件

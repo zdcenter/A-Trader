@@ -117,6 +117,7 @@ struct AccountData {
     double margin;         // 占用保证金
     double frozen_margin;  // 冻结保证金
     double commission;     // 手续费
+    double close_profit;   // 平仓盈亏
 };
 
 // 合约属性数据

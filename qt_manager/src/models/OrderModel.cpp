@@ -62,7 +62,7 @@ void OrderModel::onOrderReceived(const QString& json) {
         
         OrderItem item;
         item.instrument_id = QString::fromStdString(j.value("instrument_id", ""));
-        item.order_sys_id = QString::fromStdString(j.value("order_sys_id", ""));
+        item.order_sys_id = QString::fromStdString(j.value("order_sys_id", "")).trimmed(); // Trim CTP 的空格
         item.order_ref = QString::fromStdString(j.value("order_ref", ""));
         item.direction = QString::fromStdString(j.value("direction", ""));
         item.offset_flag = QString::fromStdString(j.value("comb_offset_flag", "")); // Core 发送的是 comb_offset_flag
@@ -77,6 +77,13 @@ void OrderModel::onOrderReceived(const QString& json) {
         item.exchange_id = QString::fromStdString(j.value("exchange_id", ""));
         item.front_id = j.value("front_id", 0);
         item.session_id = j.value("session_id", 0);
+        
+        // 调试日志
+        qDebug() << "[OrderModel] Received order:"
+                 << "instrument_id=" << item.instrument_id
+                 << "order_sys_id=" << item.order_sys_id
+                 << "order_ref=" << item.order_ref
+                 << "status=" << item.order_status;
         
         // 查找是否存在
         int idx = findOrderIndex(item.order_sys_id, item.order_ref);

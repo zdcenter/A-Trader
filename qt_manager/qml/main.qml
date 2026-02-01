@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Qt.labs.settings
+import "."
 
 ApplicationWindow {
     id: appWindow
@@ -22,6 +23,9 @@ ApplicationWindow {
         property int x: 100
         property int y: 100
         property int visibility: Window.Windowed
+        
+        // 主题索引
+        property int themeIndex: 0
         
         // 分割面板状态
         property int rightPanelWidth: 350
@@ -59,9 +63,86 @@ ApplicationWindow {
         appSettings.positionListWidth = positionPanel.width
     }
 
+    // ============ 主题系统 ============
+    property int themeIndex: appSettings.themeIndex
+    
+    // 主题配色定义
+    readonly property var themes: [
+        // 0: 深色经典 - VS Code 风格
+        { name: "深色经典", bg: "#1e1e1e", surface: "#252526", surfaceLight: "#2d2d30", border: "#3e3e42", 
+          text: "#ffffff", textSec: "#cccccc", accent: "#007acc", success: "#4caf50", danger: "#f44336", warning: "#ff9800" },
+        // 1: 文华财经 - 深蓝背景，红涨绿跌，橙黄强调
+        { name: "文华财经", bg: "#0c1929", surface: "#0f2137", surfaceLight: "#132a45", border: "#1a3a5c",
+          text: "#ffffff", textSec: "#8cb4d8", accent: "#f0a030", success: "#00cc66", danger: "#ff3333", warning: "#ffcc00" },
+        // 2: 经典黑金 - 纯黑背景，金色强调，专业交易风格
+        { name: "经典黑金", bg: "#0d0d0d", surface: "#141414", surfaceLight: "#1c1c1c", border: "#333333",
+          text: "#ffffff", textSec: "#b0b0b0", accent: "#d4a84b", success: "#00b050", danger: "#ff3030", warning: "#ffc000" },
+        // 3: 深蓝专业
+        { name: "深蓝专业", bg: "#0a1628", surface: "#0d1f3c", surfaceLight: "#132744", border: "#1e3a5f",
+          text: "#e8f4ff", textSec: "#a8c5e8", accent: "#3b82f6", success: "#22c55e", danger: "#ef4444", warning: "#f59e0b" },
+        // 4: 暖夜护眼
+        { name: "暖夜护眼", bg: "#1a1614", surface: "#242019", surfaceLight: "#2e2820", border: "#3d362b",
+          text: "#f5e6d3", textSec: "#c9b89a", accent: "#d4a574", success: "#7cb342", danger: "#e57373", warning: "#ffb74d" },
+        // 5: 高对比度
+        { name: "高对比度", bg: "#000000", surface: "#1a1a1a", surfaceLight: "#2a2a2a", border: "#4a4a4a",
+          text: "#ffffff", textSec: "#e0e0e0", accent: "#00bfff", success: "#00ff7f", danger: "#ff4444", warning: "#ffdd00" }
+    ]
+    
+    // 当前主题便捷访问
+    readonly property var currentTheme: themes[themeIndex] || themes[0]
+
     background: Rectangle {
-        color: "#1e1e1e" // 深色系背景
+        color: appWindow.currentTheme.bg
     }
+
+
+    // 菜单栏
+    menuBar: MenuBar {
+        Menu {
+            title: "选项(&O)"
+            
+            Menu {
+                title: "🎨 配色方案"
+                
+                MenuItem {
+                    text: "深色经典" + (appWindow.themeIndex === 0 ? " ✓" : "")
+                    onTriggered: { appSettings.themeIndex = 0; appWindow.themeIndex = 0 }
+                }
+                MenuItem {
+                    text: "文华财经" + (appWindow.themeIndex === 1 ? " ✓" : "")
+                    onTriggered: { appSettings.themeIndex = 1; appWindow.themeIndex = 1 }
+                }
+                MenuItem {
+                    text: "经典黑金" + (appWindow.themeIndex === 2 ? " ✓" : "")
+                    onTriggered: { appSettings.themeIndex = 2; appWindow.themeIndex = 2 }
+                }
+                
+                MenuSeparator {}
+                
+                MenuItem {
+                    text: "深蓝专业" + (appWindow.themeIndex === 3 ? " ✓" : "")
+                    onTriggered: { appSettings.themeIndex = 3; appWindow.themeIndex = 3 }
+                }
+                MenuItem {
+                    text: "暖夜护眼" + (appWindow.themeIndex === 4 ? " ✓" : "")
+                    onTriggered: { appSettings.themeIndex = 4; appWindow.themeIndex = 4 }
+                }
+                MenuItem {
+                    text: "高对比度" + (appWindow.themeIndex === 5 ? " ✓" : "")
+                    onTriggered: { appSettings.themeIndex = 5; appWindow.themeIndex = 5 }
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
+                text: "⚙ 设置"
+                onTriggered: settingsWin.open()
+            }
+        }
+    }
+
+
 
     // 主布局容器
     ColumnLayout {
@@ -270,8 +351,8 @@ ApplicationWindow {
         Rectangle {
             id: statusBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 35
-            color: "#252526"
+            Layout.preferredHeight: 38
+            color: currentTheme.surface
             
             property bool isCoreConnected: AppOrderController.coreConnected
             property bool isCtpConnected: AppOrderController.ctpConnected
@@ -283,7 +364,48 @@ ApplicationWindow {
                 anchors.rightMargin: 10
                 spacing: 20
 
-                // 2.1 左侧：连接状态和时间
+                // 2.1 左侧：资金信息
+                RowLayout {
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 20
+                    
+                    Text { 
+                        text: AppOrderController.investorId
+                        color: currentTheme.warning; font.bold: true; font.pixelSize: 13
+                    }
+                    
+                    Text { 
+                        text: "权益: " + (statusBar.accountInfo ? statusBar.accountInfo.equity.toFixed(2) : "--")
+                        color: currentTheme.text; font.family: "Monospace"; font.pixelSize: 13; font.bold: true
+                    }
+                    
+                    Text { 
+                        text: "可用: " + (statusBar.accountInfo ? statusBar.accountInfo.available.toFixed(2) : "--")
+                        color: currentTheme.success; font.family: "Monospace"; font.pixelSize: 13
+                    }
+                    
+                    Text { 
+                        text: "盈亏: " + (statusBar.accountInfo ? statusBar.accountInfo.floatingProfit.toFixed(2) : "--")
+                        color: (statusBar.accountInfo && statusBar.accountInfo.floatingProfit >= 0) ? currentTheme.danger : currentTheme.success
+                        font.family: "Monospace"; font.pixelSize: 13
+                    }
+                    
+                    Text { 
+                        text: "平盈: " + (statusBar.accountInfo ? statusBar.accountInfo.closeProfit.toFixed(2) : "--")
+                        color: (statusBar.accountInfo && statusBar.accountInfo.closeProfit >= 0) ? currentTheme.danger : currentTheme.success
+                        font.family: "Monospace"; font.pixelSize: 13
+                    }
+                    
+                    Text { 
+                        text: "占用: " + (statusBar.accountInfo ? statusBar.accountInfo.margin.toFixed(2) : "--")
+                        color: currentTheme.warning; font.family: "Monospace"; font.pixelSize: 13
+                    }
+                }
+
+                // 中间弹簧
+                Item { Layout.fillWidth: true }
+
+                // 2.2 右侧：连接状态和时间
                 RowLayout {
                     Layout.alignment: Qt.AlignVCenter
                     spacing: 15
@@ -292,26 +414,26 @@ ApplicationWindow {
                     RowLayout {
                         spacing: 5
                         Rectangle {
-                            width: 8; height: 8; radius: 4
-                            color: statusBar.isCtpConnected ? "#00FF00" : "#FF0000"
+                            width: 10; height: 10; radius: 5
+                            color: statusBar.isCtpConnected ? currentTheme.success : currentTheme.danger
                         }
-                        Text { text: "CTP"; color: "#cccccc"; font.pixelSize: 12 }
+                        Text { text: "CTP"; color: currentTheme.textSec; font.pixelSize: 13 }
                     }
                     RowLayout {
                         spacing: 5
                         Rectangle {
-                            width: 8; height: 8; radius: 4
-                            color: statusBar.isCoreConnected ? "#00FF00" : "#FF0000"
+                            width: 10; height: 10; radius: 5
+                            color: statusBar.isCoreConnected ? currentTheme.success : currentTheme.danger
                         }
-                        Text { text: "Core"; color: "#cccccc"; font.pixelSize: 12 }
+                        Text { text: "Core"; color: currentTheme.textSec; font.pixelSize: 13 }
                     }
 
                     // 时间
                     Text {
                         id: timeText
-                        color: "#cccccc"
+                        color: currentTheme.textSec
                         font.family: "Monospace"
-                        font.pixelSize: 12
+                        font.pixelSize: 13
                         Layout.leftMargin: 10
                         Timer {
                             interval: 1000; running: true; repeat: true
@@ -320,42 +442,12 @@ ApplicationWindow {
                         }
                     }
                 }
-
-                // 中间弹簧
-                Item { Layout.fillWidth: true }
-
-                // 2.2 右侧：资金信息
-                RowLayout {
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 20
-                    
-                    Text { 
-                        text: AppOrderController.investorId
-                        color: "#fcce03"; font.bold: true; font.pixelSize: 12
-                    }
-                    
-                    Text { 
-                        text: "权益: " + (statusBar.accountInfo ? statusBar.accountInfo.equity.toFixed(2) : "--")
-                        color: "#ffffff"; font.family: "Monospace"; font.pixelSize: 12; font.bold: true
-                    }
-                    
-                    Text { 
-                        text: "可用: " + (statusBar.accountInfo ? statusBar.accountInfo.available.toFixed(2) : "--")
-                        color: "#00FF00"; font.family: "Monospace"; font.pixelSize: 12
-                    }
-                    
-                    Text { 
-                        text: "盈亏: " + (statusBar.accountInfo ? statusBar.accountInfo.floatingProfit.toFixed(2) : "--")
-                        color: (statusBar.accountInfo && statusBar.accountInfo.floatingProfit >= 0) ? "#FF3333" : "#00FF00"
-                        font.family: "Monospace"; font.pixelSize: 12
-                    }
-                    
-                    Text { 
-                        text: "占用: " + (statusBar.accountInfo ? statusBar.accountInfo.margin.toFixed(2) : "--")
-                        color: "#ffcc00"; font.family: "Monospace"; font.pixelSize: 12
-                    }
-                }
             }
         }
+    }
+    
+    // 设置窗口实例
+    SettingsWindow {
+        id: settingsWin
     }
 }

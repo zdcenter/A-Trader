@@ -1,6 +1,8 @@
+// qmllint disable import
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import "."
 
 // 条件单管理面板 - 全新设计
 Rectangle {
@@ -1013,8 +1015,10 @@ Rectangle {
                             verticalAlignment: Text.AlignVCenter
                         }
                         
+                        scale: down ? 0.96 : 1.0
+                        
                         background: Rectangle {
-                            color: parent.down ? "#1976d2" : (parent.hovered ? "#2196f3" : "#1e88e5")
+                            color: parent.down ? "#1565c0" : (parent.hovered ? "#2196f3" : "#1e88e5") // 深蓝(press) - 亮蓝(hover) - 蓝(normal)
                             radius: 6
                         }
                         

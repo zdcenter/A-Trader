@@ -20,7 +20,10 @@ ZmqWorker::~ZmqWorker() {
 
 void ZmqWorker::process() {
     try {
-        _subscriber.connect(zmq_topics::SUB_MARKET_ADDR);
+        // 使用动态配置的服务器地址
+        std::string sub_addr = zmq_topics::Config::instance().getSubMarketAddr();
+        _subscriber.connect(sub_addr);
+        qDebug() << "[ZmqWorker] Connecting to:" << QString::fromStdString(sub_addr);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::MARKET_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::POSITION_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ACCOUNT_DATA);
@@ -97,7 +100,7 @@ void ZmqWorker::process() {
                  bool currentCore = false;
                  try {
                      zmq::socket_t req(_context, zmq::socket_type::req);
-                     std::string addr = zmq_topics::REQ_CMD_ADDR;
+                     std::string addr = zmq_topics::Config::instance().getReqCmdAddr();
                      
                      req.connect(addr);
                      // 快速超时检测 (300ms)
@@ -142,8 +145,8 @@ void ZmqWorker::sendCommand(const QString& json) {
     try {
         zmq::socket_t requester(_context, zmq::socket_type::req);
         
-        // 修复: connect 不支持通配符 *，需要替换为 localhost
-        std::string addr = zmq_topics::REQ_CMD_ADDR;
+        // 使用动态配置的服务器地址
+        std::string addr = zmq_topics::Config::instance().getReqCmdAddr();
         
         qDebug() << "[ZmqWorker] Connecting to:" << QString::fromStdString(addr);
         requester.connect(addr);

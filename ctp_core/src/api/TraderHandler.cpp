@@ -145,6 +145,7 @@ void TraderHandler::OnRspQryTradingAccount(CThostFtdcTradingAccountField *pAccou
         data.margin = pAccount->CurrMargin;
         data.frozen_margin = pAccount->FrozenMargin;
         data.commission = pAccount->Commission;
+        data.close_profit = pAccount->CloseProfit;
         
         // 更新缓存
         account_cache_ = data;
@@ -546,9 +547,44 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
     }
     
     std::strncpy(req.OrderRef, ref, sizeof(req.OrderRef));
+    // Auto-adjust OffsetFlag for SHFE/INE (Smart Close)
+    char finalOffset = offset;
+    
+    // 1. Get Exchange ID
+    std::string exchId;
+    if (instrument_cache_.count(instrument)) {
+        exchId = instrument_cache_[instrument].exchange_id;
+    }
+
+    if (exchId == "SHFE" || exchId == "INE") {
+        // Determine Position Direction to close
+        // Buy(0) Close -> Short(3) Pos; Sell(1) Close -> Long(2) Pos
+        char posDir = (direction == THOST_FTDC_D_Buy) ? THOST_FTDC_PD_Short : THOST_FTDC_PD_Long;
+        std::string key = instrument + "_" + std::to_string(posDir);
+        
+        if (position_cache_.count(key)) {
+            const auto& pos = position_cache_[key];
+            
+            // Case 1: User sends Close (Yesterday), but we only have Today positions
+            if (offset == THOST_FTDC_OF_Close) {
+                if (pos.yd_position <= 0 && pos.today_position > 0) {
+                     std::cout << "[Td] SmartClose: Auto-Switch to CloseToday for " << instrument << std::endl;
+                     finalOffset = THOST_FTDC_OF_CloseToday;
+                }
+            }
+            // Case 2: User sends CloseToday, but we only have Yesterday positions
+            else if (offset == THOST_FTDC_OF_CloseToday) {
+                 if (pos.today_position <= 0 && pos.yd_position > 0) {
+                     std::cout << "[Td] SmartClose: Auto-Switch to Close for " << instrument << std::endl;
+                     finalOffset = THOST_FTDC_OF_Close;
+                 }
+            }
+        }
+    }
+
     req.OrderPriceType = THOST_FTDC_OPT_LimitPrice;
     req.Direction = direction; 
-    req.CombOffsetFlag[0] = offset;
+    req.CombOffsetFlag[0] = finalOffset;
     req.CombHedgeFlag[0] = THOST_FTDC_HF_Speculation;
     req.LimitPrice = price;
     req.VolumeTotalOriginal = volume;
@@ -589,10 +625,30 @@ int TraderHandler::cancelOrder(const std::string& instrument, const std::string&
     
     // 如果有 OrderSysID，优先使用 (ExchangeID + OrderSysID)
     if (!orderSysID.empty()) {
+        std::string finalSysID = orderSysID;
+        
+        // [FIX] SHFE/INE/CFFEX/CZCE usually require 12-digit right-aligned SysID with spaces
+        // If we have a short ID (like "8657"), we must pad it to 12 chars: "        8657"
+        // Also added DCE (Dalian Commodity Exchange) as it often requires padding or exact match of spaces.
+        if (finalExchangeID == "SHFE" || finalExchangeID == "INE" || finalExchangeID == "CFFEX" || finalExchangeID == "CZCE" || finalExchangeID == "DCE") {
+            if (finalSysID.length() > 0 && finalSysID.length() < 12) {
+                std::stringstream ss;
+                ss << std::setw(12) << finalSysID; 
+                finalSysID = ss.str();
+                std::cout << "[Td] Padded SysID for " << finalExchangeID << ": '" << finalSysID << "'" << std::endl;
+            }
+        }
+        
         std::strncpy(req.ExchangeID, finalExchangeID.c_str(), sizeof(req.ExchangeID));
-        std::strncpy(req.OrderSysID, orderSysID.c_str(), sizeof(req.OrderSysID));
-        // InstrumentID 对于某些柜台也是必须的
+        std::strncpy(req.OrderSysID, finalSysID.c_str(), sizeof(req.OrderSysID));
         std::strncpy(req.InstrumentID, instrument.c_str(), sizeof(req.InstrumentID));
+        
+        // Also fill Front/Session/Ref just in case some brokers need them as redundant info
+        if (frontID > 0 && sessionID > 0) {
+             req.FrontID = frontID;
+             req.SessionID = sessionID;
+             if (!orderRef.empty()) std::strncpy(req.OrderRef, orderRef.c_str(), sizeof(req.OrderRef));
+        }
     } else {
         // 否则使用 FrontID + SessionID + OrderRef + InstrumentID
         req.FrontID = frontID;

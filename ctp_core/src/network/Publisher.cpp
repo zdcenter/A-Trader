@@ -88,6 +88,7 @@ void Publisher::publishAccount(const AccountData& data) {
     j["margin"] = data.margin;
     j["frozen_margin"] = data.frozen_margin;
     j["commission"] = data.commission;
+    j["close_profit"] = data.close_profit;
 
     std::string payload = j.dump();
 

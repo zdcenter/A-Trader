@@ -1,6 +1,8 @@
+// qmllint disable import
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 /**
  * 报单列表面板组件 (Order List)
@@ -161,28 +163,36 @@ FocusScope {
                 Row {
                     anchors.fill: parent
                     
-                    // 1. 报单编号 (10%)
-                    Text { width: parent.width * 0.10; text: model.orderSysId || "-"; color: "#cccccc"; font.family: "Consolas"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight }
+                    // 1. 报单编号 (10%) - 优先显示 orderSysId，为空则显示 orderRef
+                    Text { 
+                        width: parent.width * 0.10; 
+                        text: orderSysId || ("#" + orderRef); 
+                        color: orderSysId ? "#cccccc" : "#888888"; 
+                        font.family: "Consolas"; 
+                        horizontalAlignment: Text.AlignHCenter; 
+                        anchors.verticalCenter: parent.verticalCenter; 
+                        elide: Text.ElideRight 
+                    }
                     // 2. 合约 (10%)
-                    Text { width: parent.width * 0.10; text: model.instrumentId; color: "#4ec9b0"; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.10; text: instrumentId; color: "#4ec9b0"; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 3. 买卖 (5%)
-                    Text { width: parent.width * 0.05; text: getDirText(model.direction); color: model.direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.05; text: getDirText(direction); color: direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 4. 开平 (5%)
-                    Text { width: parent.width * 0.05; text: getOffsetFlagText(model.offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                    // 5. 状态 (8%)
-                    Text { width: parent.width * 0.08; text: getStatusText(model.status); color: getStatusColor(model.status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.05; text: getOffsetFlagText(offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 6. 价格 (10%)
-                    Text { width: parent.width * 0.10; text: model.price.toFixed(2); color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.10; text: price.toFixed(2); color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 7. 报单 (6%)
-                    Text { width: parent.width * 0.06; text: model.volumeOriginal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.06; text: volumeOriginal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 8. 未成 (6%)
-                    Text { width: parent.width * 0.06; text: model.volumeTotal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.06; text: volumeTotal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 9. 成交 (6%)
-                    Text { width: parent.width * 0.06; text: model.volumeTraded; color: model.volumeTraded > 0 ? "#4caf50" : "#888888"; font.family: "Consolas"; font.bold: model.volumeTraded > 0; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.06; text: volumeTraded; color: volumeTraded > 0 ? "#4caf50" : "#888888"; font.family: "Consolas"; font.bold: volumeTraded > 0; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    // 5. 状态 (8%)
+                    Text { width: parent.width * 0.08; text: getStatusText(status); color: getStatusColor(status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 10. 详细状态 (22%)
-                    Text { width: parent.width * 0.22; text: model.statusMsg; color: "#aaaaaa"; font.pixelSize: 11; elide: Text.ElideRight; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.22; text: statusMsg; color: "#aaaaaa"; font.pixelSize: 11; elide: Text.ElideRight; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 11. 报单时间 (12%)
-                    Text { width: parent.width * 0.12; text: model.time; color: "#cccccc"; font.family: "Consolas"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.12; text: time; color: "#cccccc"; font.family: "Consolas"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                 }
 
                 MouseArea {

@@ -1,7 +1,9 @@
+// qmllint disable import
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.settings 1.0
+import "."
 
 /**
  * 增强版实时行情面板
@@ -225,22 +227,21 @@ FocusScope {
 
     // 辅助函数：获取文本颜色
     function getCellColor(role, model) {
-        if (role === "instrumentId") return "#569cd6";
-        if (role === "volume" || role === "openInterest" || role === "bidVolume1" || role === "askVolume1" || role === "updateTime") return "#cccccc";
+        if (role === "instrumentId") return appWindow.currentTheme.accent;
+        if (role === "volume" || role === "openInterest" || role === "bidVolume1" || role === "askVolume1" || role === "updateTime") return appWindow.currentTheme.textSec;
         
         // 价格相关字段
         var val = 0;
         if (role === "change" || role === "changePercent") {
             val = model.change;
         } else if (role === "lastPrice" || role === "bidPrice1" || role === "askPrice1") {
-            // 对比昨收或其他逻辑，这里简单用涨跌额判断
-            if (model.change > 0) return "#f44336";
-            if (model.change < 0) return "#4caf50";
-            return "white";
+            if (model.change > 0) return appWindow.currentTheme.danger;
+            if (model.change < 0) return appWindow.currentTheme.success;
+            return appWindow.currentTheme.text;
         }
         
-        if (role === "upperLimit") return "#f44336";
-        if (role === "lowerLimit") return "#4caf50";
+        if (role === "upperLimit") return appWindow.currentTheme.danger;
+        if (role === "lowerLimit") return appWindow.currentTheme.success;
         
         // 其他价格字段：与昨收/昨结比较
         if (role === "openPrice" || role === "highestPrice" || role === "lowestPrice" || role === "averagePrice") {
@@ -250,17 +251,17 @@ FocusScope {
              if (role === "lowestPrice") p = model.lowestPrice;
              if (role === "averagePrice") p = model.averagePrice;
              
-             if (p > model.preClose && model.preClose > 0.1) return "#f44336";
-             if (p < model.preClose && model.preClose > 0.1) return "#4caf50";
-             return "white";
+             if (p > model.preClose && model.preClose > 0.1) return appWindow.currentTheme.danger;
+             if (p < model.preClose && model.preClose > 0.1) return appWindow.currentTheme.success;
+             return appWindow.currentTheme.text;
         }
         
         if (role === "change" || role === "changePercent") {
-            if (val > 0) return "#f44336"; // 红涨
-            if (val < 0) return "#4caf50"; // 绿跌
+            if (val > 0) return appWindow.currentTheme.danger;
+            if (val < 0) return appWindow.currentTheme.success;
         }
         
-        return "#cccccc";
+        return appWindow.currentTheme.textSec;
     }
 
     ColumnLayout {
@@ -270,8 +271,8 @@ FocusScope {
         // 顶部操作栏
         Rectangle { 
             Layout.fillWidth: true
-            height: 35
-            color: "#2d2d30"
+            height: 38
+            color: appWindow.currentTheme.surfaceLight
             
             RowLayout {
                 anchors.fill: parent
@@ -280,8 +281,8 @@ FocusScope {
                 
                 Text { 
                     text: "📊 实时行情"
-                    color: "#cccccc"
-                    font.pixelSize: 13
+                    color: appWindow.currentTheme.textSec
+                    font.pixelSize: 14
                 }
                 
                 Item { Layout.fillWidth: true }
@@ -289,15 +290,15 @@ FocusScope {
                 TextField {
                     id: subInput
                     placeholderText: "代码..."
-                    font.pixelSize: 12
-                    color: "white"
+                    font.pixelSize: 13
+                    color: appWindow.currentTheme.text
                     background: Rectangle {
-                        color: "#1e1e1e"
+                        color: appWindow.currentTheme.bg
                         radius: 4
-                        border.color: "#333333"
+                        border.color: appWindow.currentTheme.border
                     }
                     Layout.preferredWidth: 100
-                    Layout.preferredHeight: 26
+                    Layout.preferredHeight: 28
                     
                     onAccepted: {
                         if (text.trim() !== "") {
@@ -328,14 +329,14 @@ FocusScope {
                 Button {
                     id: configButton
                     text: "⚙️"
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 26
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 28
                     background: Rectangle {
-                        color: parent.hovered ? "#3e3e42" : "#333333"
+                        color: parent.hovered ? appWindow.currentTheme.surfaceLight : appWindow.currentTheme.surface
                         radius: 4
                     }
                     contentItem: Text { 
-                        text: parent.text; color: "#cccccc"; 
+                        text: parent.text; color: appWindow.currentTheme.textSec; 
                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter 
                     }
                     onClicked: {
@@ -351,8 +352,8 @@ FocusScope {
         // 可拖拽表头
         Rectangle {
             Layout.fillWidth: true
-            height: 30
-            color: "#1e1e1e"
+            height: 32
+            color: appWindow.currentTheme.bg
             
             // 更新可用宽度
             onWidthChanged: {
