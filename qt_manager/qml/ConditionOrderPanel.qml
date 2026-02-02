@@ -3,11 +3,19 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "."
+import Qt.labs.settings
 
 // 条件单管理面板 - 全新设计
 Rectangle {
     id: root
     color: "#1e1e1e"
+    
+    // 持久化存储
+    Settings {
+        id: conditionSettings
+        category: "ConditionOrder"
+        property int savedStrategyIndex: 0
+    }
     
     // 焦点捕捉器：用于承载“无处安放”的焦点
     Item {
@@ -251,6 +259,30 @@ Rectangle {
                                     id: strategyCombo
                                     width: parent.width
                                     height: 32
+                                    
+                                    // 自动保存/恢复策略选择
+                                    onActivated: (index) => {
+                                        console.log("[Persistence] Saving strategy index:", index)
+                                        conditionSettings.savedStrategyIndex = index
+                                    }
+                                    Component.onCompleted: {
+                                        console.log("[Persistence] Init. Saved:", conditionSettings.savedStrategyIndex, "Count:", count)
+                                        if (count > conditionSettings.savedStrategyIndex) { 
+                                            currentIndex = conditionSettings.savedStrategyIndex 
+                                            console.log("[Persistence] Restored index:", currentIndex)
+                                        }
+                                    }
+                                    onCountChanged: {
+                                        console.log("[Persistence] CountChanged. Saved:", conditionSettings.savedStrategyIndex, "Count:", count, "Current:", currentIndex)
+                                        // 仅当当前索引与保存的不一致，且保存的索引有效时才恢复
+                                        // 允许当前为 0 (默认) 或 -1 (未选中) 时恢复
+                                        if (count > 0 && conditionSettings.savedStrategyIndex < count) {
+                                            if ((currentIndex === 0 || currentIndex === -1) && conditionSettings.savedStrategyIndex !== 0) {
+                                                 currentIndex = conditionSettings.savedStrategyIndex
+                                                 console.log("[Persistence] Auto-restored index via CountChanged:", currentIndex)
+                                            }
+                                        }
+                                    }
                                     model: root.orderController ? root.orderController.strategyList : []
                                     textRole: "name"
                                     
@@ -294,7 +326,7 @@ Rectangle {
                                 width: 70
                                 height: 32
                                 model: [">", "≥", "<", "≤"]
-                                currentIndex: 0
+                                currentIndex: 1
                                 
                                 contentItem: Text {
                                     text: conditionTypeCombo.displayText
@@ -717,7 +749,7 @@ Rectangle {
                                 id: marketPriceRadio
                                 text: "市价"
                                 ButtonGroup.group: priceTypeGroup
-                                checked: true // 默认选中市价
+                                checked: false
                                 
                                 contentItem: Text {
                                     text: parent.text
@@ -793,13 +825,15 @@ Rectangle {
                             }
                             
                             RadioButton {
-                                id: bidPriceRadio
-                                text: "买一"
+                                id: opponentPriceRadio
+                                text: "对手"
                                 ButtonGroup.group: priceTypeGroup
+                                checked: true // 默认选中
                                 
                                 contentItem: Text {
                                     text: parent.text
                                     font.pixelSize: 13
+                                    font.bold: true
                                     color: "#ffffff"
                                     leftPadding: 28
                                     verticalAlignment: Text.AlignVCenter
@@ -809,7 +843,7 @@ Rectangle {
                                     width: 18
                                     height: 18
                                     radius: 9
-                                    border.color: "#f44336" // 买入红
+                                    border.color: "#ffa726"
                                     border.width: 2
                                     color: "transparent"
                                     anchors.verticalCenter: parent.verticalCenter
@@ -818,67 +852,39 @@ Rectangle {
                                         width: 10
                                         height: 10
                                         radius: 5
-                                        color: "#f44336"
+                                        color: "#ffa726"
                                         anchors.centerIn: parent
-                                        visible: bidPriceRadio.checked
+                                        visible: opponentPriceRadio.checked
                                     }
                                 }
                                 
                                 onClicked: {
-                                    // 绑定到买一价
                                     limitPriceInput.text = Qt.binding(function() { 
-                                        if (root.orderController && root.orderController.bidPrices && root.orderController.bidPrices.length > 0) {
-                                            var p = root.orderController.bidPrices[0]
-                                            return p > 0 ? p.toFixed(2) : ""
+                                        if (!root.orderController) return ""
+                                        
+                                        // 动态绑定：买入用卖一，卖出用买一
+                                        var isBuy = buyRadio.checked
+                                        var price = 0.0
+                                        
+                                        if (isBuy) {
+                                            if (root.orderController.askPrices && root.orderController.askPrices.length > 0) {
+                                                price = root.orderController.askPrices[0]
+                                            }
+                                        } else {
+                                            if (root.orderController.bidPrices && root.orderController.bidPrices.length > 0) {
+                                                price = root.orderController.bidPrices[0]
+                                            }
                                         }
-                                        return ""
+                                        return price > 0 ? price.toFixed(2) : ""
                                     })
+                                }
+                                
+                                Component.onCompleted: {
+                                    if(checked) onClicked()
                                 }
                             }
                             
-                            RadioButton {
-                                id: askPriceRadio
-                                text: "卖一"
-                                ButtonGroup.group: priceTypeGroup
-                                
-                                contentItem: Text {
-                                    text: parent.text
-                                    font.pixelSize: 13
-                                    color: "#ffffff"
-                                    leftPadding: 28
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                
-                                indicator: Rectangle {
-                                    width: 18
-                                    height: 18
-                                    radius: 9
-                                    border.color: "#4caf50" // 卖出绿
-                                    border.width: 2
-                                    color: "transparent"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    
-                                    Rectangle {
-                                        width: 10
-                                        height: 10
-                                        radius: 5
-                                        color: "#4caf50"
-                                        anchors.centerIn: parent
-                                        visible: askPriceRadio.checked
-                                    }
-                                }
-                                
-                                onClicked: {
-                                    // 绑定到卖一价
-                                    limitPriceInput.text = Qt.binding(function() { 
-                                        if (root.orderController && root.orderController.askPrices && root.orderController.askPrices.length > 0) {
-                                            var p = root.orderController.askPrices[0]
-                                            return p > 0 ? p.toFixed(2) : ""
-                                        }
-                                        return ""
-                                    })
-                                }
-                            }
+
                         }
                         
                         TextField {

@@ -1,0 +1,10 @@
+^Z:\QT_MANAGER\BUILD-WINDOWS\CMAKEFILES\E200FC0B757120A2822F65FF0F087C51\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SZ:/qt_manager -BZ:/qt_manager/build-windows --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file Z:/qt_manager/build-windows/qt_manager.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

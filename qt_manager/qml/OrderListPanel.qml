@@ -76,16 +76,16 @@ FocusScope {
                 Text { width: parent.width * 0.05; text: "买卖"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 4. 开平 (5%)
                 Text { width: parent.width * 0.05; text: "开平"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-                // 5. 状态 (8%)
-                Text { width: parent.width * 0.08; text: "状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 6. 价格 (10%)
-                Text { width: parent.width * 0.10; text: "价格"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.10; text: "委托价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 7. 报单 (6%)
                 Text { width: parent.width * 0.06; text: "报单"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 8. 未成 (6%)
                 Text { width: parent.width * 0.06; text: "未成"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 9. 成交 (6%)
                 Text { width: parent.width * 0.06; text: "成交"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                // 5. 状态 (8%)
+                Text { width: parent.width * 0.08; text: "状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 10. 详细状态 (22%)
                 Text { width: parent.width * 0.22; text: "详细状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 11. 报单时间 (12%)
@@ -99,6 +99,7 @@ FocusScope {
             Layout.fillHeight: true
             model: root.orderModel
             clip: true
+            currentIndex: -1  // 禁用默认选中
             ScrollBar.vertical: ScrollBar {}
             
             delegate: Rectangle {
@@ -106,10 +107,11 @@ FocusScope {
                 width: ListView.view.width
                 height: 35
                 
-                // 状态颜色逻辑
+                // 统一的选中和悬停样式
                 color: {
-                    if (ListView.isCurrentItem) return "#2c5d87"
-                    if (mouseArea.containsMouse) return "#3a3a3a"
+                    if (mouseArea.containsMouse && ListView.view.currentIndex === index) return "#3a5a7a"
+                    if (ListView.view.currentIndex === index) return "#2c5d87"
+                    if (mouseArea.containsMouse) return "#2a2a2a"
                     return index % 2 === 0 ? "#1e1e1e" : "#252526"
                 }
 

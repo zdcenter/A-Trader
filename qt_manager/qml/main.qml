@@ -35,6 +35,14 @@ ApplicationWindow {
         property int positionListWidth: 600
     }
     
+    // 全局交易设置（供所有组件共享）
+    Settings {
+        id: globalTradeSettings
+        category: "Trade"
+        property int defaultVolume: 1
+        property int defaultPriceType: 0
+    }
+    
     Component.onCompleted: {
         if (appSettings.width > 0) width = appSettings.width
         if (appSettings.height > 0) height = appSettings.height
@@ -137,7 +145,7 @@ ApplicationWindow {
             
             MenuItem {
                 text: "⚙ 设置"
-                onTriggered: settingsWin.open()
+                onTriggered: settingsWin.visible = true
             }
         }
     }
@@ -209,6 +217,11 @@ ApplicationWindow {
                         SplitView.fillWidth: true
                         SplitView.fillHeight: true
                         orderController: AppOrderController
+                        
+                        onRequestConditionOrderPanel: {
+                            orderPanel.visible = false
+                            conditionOrderPanel.visible = true
+                        }
                     }
                 }
 
@@ -318,6 +331,7 @@ ApplicationWindow {
                             anchors.fill: parent
                             visible: true
                             orderController: AppOrderController
+                            property var tradeSettings: globalTradeSettings
                         }
                         
                         // 条件下单面板
@@ -449,5 +463,7 @@ ApplicationWindow {
     // 设置窗口实例
     SettingsWindow {
         id: settingsWin
+        mainWindow: appWindow
+        property var tradeSettings: globalTradeSettings
     }
 }

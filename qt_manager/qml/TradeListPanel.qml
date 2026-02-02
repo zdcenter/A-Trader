@@ -78,6 +78,7 @@ FocusScope {
             Layout.fillHeight: true
             model: root.tradeModel
             clip: true
+            currentIndex: -1  // 禁用默认选中
             ScrollBar.vertical: ScrollBar {}
             
             delegate: Rectangle {
@@ -85,11 +86,11 @@ FocusScope {
                 width: tradeListView.width
                 height: 35
                 
-                // 选中和悬停样式
+                // 统一的选中和悬停样式
                 color: {
-                    if (tradeListView.currentItem === this) return "#2c5d87" // Use currentItem check or index
+                    if (mouseArea.containsMouse && tradeListView.currentIndex === index) return "#3a5a7a"
                     if (tradeListView.currentIndex === index) return "#2c5d87"
-                    if (mouseArea.containsMouse) return "#3a3a3a"
+                    if (mouseArea.containsMouse) return "#2a2a2a"
                     return index % 2 === 0 ? "#1e1e1e" : "#252526"
                 }
                 required property int index

@@ -729,19 +729,29 @@ Rectangle {
             }
         }
         
-    // 引用交易设置
-    Settings {
-        id: tradeSettings
-        category: "Trade"
-        property int defaultVolume: 1
-        property int defaultPriceType: 0
+    // 交易设置（从外部传入，不在这里定义）
+    // property var tradeSettings 已在 main.qml 中传入
+
+    // 监听交易设置变化，立即应用
+    Connections {
+        target: tradeSettings
+        function onDefaultVolumeChanged() {
+            if (orderController && tradeSettings) {
+                orderController.volume = tradeSettings.defaultVolume
+            }
+        }
+        function onDefaultPriceTypeChanged() {
+            if (tradeSettings) {
+                priceTypeCombo.currentIndex = tradeSettings.defaultPriceType
+            }
+        }
     }
 
     // 监听合约切换，重置面板默认值
     Connections {
         target: orderController
         function onInstrumentIdChanged() {
-            if (orderController) {
+            if (orderController && tradeSettings) {
                 // 重置手数
                 orderController.volume = tradeSettings.defaultVolume
                 
@@ -753,7 +763,7 @@ Rectangle {
     
     // 初始化时也应用一次
     Component.onCompleted: {
-        if (orderController) {
+        if (orderController && tradeSettings) {
              orderController.volume = tradeSettings.defaultVolume
              priceTypeCombo.currentIndex = tradeSettings.defaultPriceType
         }

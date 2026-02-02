@@ -77,30 +77,36 @@ FocusScope {
         
         // 持仓列表
         ListView {
+            id: positionListView
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: root.positionModel
             clip: true
+            currentIndex: -1  // 禁用默认选中
             ScrollBar.vertical: ScrollBar {}
             
             delegate: Rectangle {
-                width: parent.width
+                id: positionDelegate
+                width: positionListView.width
                 height: 40
                 
-                // 选中态背景色逻辑
-                color: {
-                    if (orderController && orderController.instrumentId === model.instrumentId) {
-                        return "#2c3e50" // 选中深蓝
-                    }
-                    return index % 2 === 0 ? "#1e1e1e" : "#252526"
-                }
+                required property int index
+                required property string exchangeId
+                required property string instrumentId
+                required property string direction
+                required property int position
+                required property int ydPosition
+                required property int todayPosition
+                required property string avgPrice
+                required property double lastPrice
+                required property string profit
                 
-                // 选中指示条
-                Rectangle {
-                    width: 3
-                    height: parent.height
-                    color: "#569cd6"
-                    visible: orderController && orderController.instrumentId === model.instrumentId
+                // 统一的选中和悬停样式
+                color: {
+                    if (positionMouseArea.containsMouse && positionListView.currentIndex === index) return "#3a5a7a"
+                    if (positionListView.currentIndex === index) return "#2c5d87"
+                    if (positionMouseArea.containsMouse) return "#2a2a2a"
+                    return index % 2 === 0 ? "#1e1e1e" : "#252526"
                 }
                 
                 Row {
@@ -109,7 +115,7 @@ FocusScope {
                     Text {
                         width: parent.width * 0.08
                         height: 40
-                        text: model.exchangeId
+                        text: exchangeId
                         color: "#aaaaaa"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -117,7 +123,7 @@ FocusScope {
                     Text {
                         width: parent.width * 0.15
                         height: 40
-                        text: model.instrumentId
+                        text: instrumentId
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -125,15 +131,15 @@ FocusScope {
                     Text {
                         width: parent.width * 0.07
                         height: 40
-                        text: model.direction
-                        color: model.direction === "BUY" ? "#f44336" : "#4caf50"
+                        text: direction
+                        color: direction === "BUY" ? "#f44336" : "#4caf50"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
                         width: parent.width * 0.20
                         height: 40
-                        text: model.position + " / " + model.ydPosition + " / " + model.todayPosition
+                        text: position + " / " + ydPosition + " / " + todayPosition
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -141,7 +147,7 @@ FocusScope {
                     Text {
                         width: parent.width * 0.15
                         height: 40
-                        text: model.avgPrice
+                        text: avgPrice
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -149,7 +155,7 @@ FocusScope {
                     Text {
                         width: parent.width * 0.15
                         height: 40
-                        text: model.lastPrice.toFixed(2)
+                        text: lastPrice.toFixed(2)
                         color: "#aaaaaa"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -157,8 +163,8 @@ FocusScope {
                     Text {
                         width: parent.width * 0.20
                         height: 40
-                        text: model.profit
-                        color: parseFloat(model.profit) >= 0 ? "#f44336" : "#4caf50"
+                        text: profit
+                        color: parseFloat(profit) >= 0 ? "#f44336" : "#4caf50"
                         font.bold: true
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -166,7 +172,9 @@ FocusScope {
                 }
                 
                 MouseArea {
+                    id: positionMouseArea
                     anchors.fill: parent
+                    hoverEnabled: true
                     
                     // 防误触/重复提交标志
                     property bool processing: false
@@ -178,61 +186,51 @@ FocusScope {
                     }
 
                     onClicked: {
+                        positionListView.currentIndex = index
                         if (orderController) {
-                            orderController.instrumentId = model.instrumentId
-                            // 点击持仓时，自动填入价格为最新价
-                            orderController.price = model.lastPrice
-                            
-                            // orderController.subscribe(model.instrumentId)
-                            // 自动填入本次持仓的手数
-                            orderController.volume = model.position
+                            orderController.instrumentId = instrumentId
+                            orderController.price = lastPrice
+                            orderController.volume = position
                         }
                     }
                     onDoubleClicked: {
-                        if (processing) return; // 防止连点
+                        if (processing) return;
                         processing = true;
                         resetTimer.start();
 
                         if (orderController) {
-                            orderController.instrumentId = model.instrumentId
-                            orderController.price = model.lastPrice // 双击全平使用最新价
-                            // orderController.subscribe(model.instrumentId)
+                            orderController.instrumentId = instrumentId
+                            orderController.price = lastPrice
                             
-                            // 1. 确定平仓方向 (持仓的反向)
-                            var actionDir = (model.direction === "BUY") ? "SELL" : "BUY"
+                            var actionDir = (direction === "BUY") ? "SELL" : "BUY"
                             
-                            // 2. 判定是否为上期所/能源中心合约 (需区分平今/平昨)
-                            // 优先判断交易所; 如果交易所为空(尚未收到合约信息), 则通过合约代码前缀猜测
                             var isShfe = false
-                            if (model.exchangeId && model.exchangeId !== "") {
-                                isShfe = (model.exchangeId === "SHFE" || model.exchangeId === "INE")
+                            if (exchangeId && exchangeId !== "") {
+                                isShfe = (exchangeId === "SHFE" || exchangeId === "INE")
                             } else {
-                                var id = model.instrumentId.toLowerCase()
+                                var id = instrumentId.toLowerCase()
                                 var prefix = id.replace(/[0-9]+/, "")
                                 var shfePrefixes = ["cu","al","zn","pb","ni","sn","au","ag","rb","wr","hc","fu","bu","ru","sp","sc","nr","lu","bc","br","ec"]
                                 isShfe = shfePrefixes.indexOf(prefix) !== -1
                             }
                             
-                            console.log("[QuickClose] DoubleClick: " + model.instrumentId + " Dir:" + actionDir + " IsShfe:" + isShfe)
+                            console.log("[QuickClose] DoubleClick: " + instrumentId + " Dir:" + actionDir + " IsShfe:" + isShfe)
                             
                             if (isShfe) {
-                                // 上期所优先平今
-                                if (model.todayPosition > 0) {
-                                    orderController.volume = model.todayPosition
+                                if (todayPosition > 0) {
+                                    orderController.volume = todayPosition
                                     orderController.sendOrder(actionDir, "CLOSETODAY")
-                                    console.log(" -> CloseToday Vol:" + model.todayPosition)
+                                    console.log(" -> CloseToday Vol:" + todayPosition)
                                 }
-                                // 再平昨
-                                if (model.ydPosition > 0) {
-                                    orderController.volume = model.ydPosition
+                                if (ydPosition > 0) {
+                                    orderController.volume = ydPosition
                                     orderController.sendOrder(actionDir, "CLOSE")
-                                    console.log(" -> CloseYesterday Vol:" + model.ydPosition)
+                                    console.log(" -> CloseYesterday Vol:" + ydPosition)
                                 }
                             } else {
-                                // 其他交易所直接平仓
-                                orderController.volume = model.position
+                                orderController.volume = position
                                 orderController.sendOrder(actionDir, "CLOSE")
-                                console.log(" -> Close Vol:" + model.position)
+                                console.log(" -> Close Vol:" + position)
                             }
                         }
                     }

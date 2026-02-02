@@ -1,8 +1,0 @@
-{
-    "connection": {
-        "server_address": "127.0.0.1",
-        "pub_port": 5555,
-        "rep_port": 5556,
-        "comment": "开发时使用 127.0.0.1 (本地), Windows 使用时改为 Linux 服务器 IP"
-    }
-}

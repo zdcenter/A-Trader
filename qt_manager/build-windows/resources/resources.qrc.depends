@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>sounds/condition_triggered.wav</file>
+        <file>sounds/condition_cancelled.wav</file>
+    </qresource>
+</RCC>

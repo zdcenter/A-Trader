@@ -1,0 +1,11 @@
+Z:\qt_manager\src\main.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\main.obj
+Z:\qt_manager\src\network\ZmqWorker.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\ZmqWorker.obj
+Z:\qt_manager\src\models\MarketModel.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\MarketModel.obj
+Z:\qt_manager\src\models\PositionModel.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\PositionModel.obj
+Z:\qt_manager\src\models\AccountInfo.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\AccountInfo.obj
+Z:\qt_manager\src\models\OrderController.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\OrderController.obj
+Z:\qt_manager\src\models\OrderModel.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\OrderModel.obj
+Z:\qt_manager\src\models\TradeModel.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\TradeModel.obj
+Z:\qt_manager\build-windows\qrc_qml.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\qrc_qml.obj
+Z:\qt_manager\build-windows\qrc_resources.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\qrc_resources.obj
+Z:\qt_manager\build-windows\qt_manager_autogen\mocs_compilation_Release.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\mocs_compilation_Release.obj

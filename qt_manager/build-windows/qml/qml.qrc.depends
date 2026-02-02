@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>AccountInfoPanel.qml</file>
+        <file>MarketQuotePanel.qml</file>
+        <file>PositionPanel.qml</file>
+        <file>OrderPanel.qml</file>
+        <file>OrderListPanel.qml</file>
+        <file>TradeListPanel.qml</file>
+        <file>ConditionOrderPanel.qml</file>
+        <file>ConditionListPanel.qml</file>
+        <file>SettingsWindow.qml</file>
+    </qresource>
+</RCC>

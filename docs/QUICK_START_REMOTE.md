@@ -32,22 +32,33 @@ cd /home/zd/A-Trader/qt_manager/build
 #### **快速开始**
 
 ```cmd
-# 1. 在 Windows 命令行中访问 WSL 项目
-cd \\wsl$\Ubuntu\home\zd\A-Trader\qt_manager
+# 1. 安装依赖（一次性）
+C:\vcpkg\vcpkg install cppzmq:x64-windows nlohmann-json:x64-windows
 
-# 2. 创建 Windows 编译目录
+# 2. 映射 WSL 驱动器
+subst Z: \\wsl$\Ubuntu\home\zd\A-Trader
+
+# 3. 在 Windows 命令行中访问 WSL 项目
+Z:
+cd qt_manager
+
+# 4. 使用自动化脚本编译
+build_windows.bat
+
+# 或者手动编译
 mkdir build-windows
 cd build-windows
-
-# 3. 配置并编译（需先安装 Qt 和 vcpkg）
-cmake .. -G "Visual Studio 17 2022" -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake
+cmake .. -G "Visual Studio 17 2022" ^
+    -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
+    -DCMAKE_PREFIX_PATH=D:\Qt\6.10.2\msvc2022_64
 cmake --build . --config Release
 
-# 4. 创建配置文件（使用 localhost）
-echo {"connection":{"server_address":"localhost","pub_port":5555,"rep_port":5556}} > Release\config.json
+# 5. 创建配置文件（使用 localhost）
+cd Release
+echo {"connection":{"server_address":"localhost","pub_port":5555,"rep_port":5556}} > config.json
 
-# 5. 运行
-Release\qt_manager.exe
+# 6. 运行
+qt_manager.exe
 ```
 
 **详细步骤**：查看 `docs/WINDOWS_WSL_BUILD.md`

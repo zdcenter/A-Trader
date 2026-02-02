@@ -57,40 +57,172 @@ cd vcpkg
 #### 4. 安装依赖库
 
 ```cmd
-# 安装 ZeroMQ 和 nlohmann-json
-C:\vcpkg\vcpkg install zeromq:x64-windows
+# 安装 ZeroMQ C++ 头文件（必需）
+C:\vcpkg\vcpkg install cppzmq:x64-windows
+
+# 安装 JSON 库
 C:\vcpkg\vcpkg install nlohmann-json:x64-windows
+
+# 验证安装
+C:\vcpkg\vcpkg list | findstr zmq
+# 应该看到：
+# cppzmq:x64-windows
+# zeromq:x64-windows
 
 # 集成到 Visual Studio
 C:\vcpkg\vcpkg integrate install
 ```
 
+> 💡 **重要**：必须安装 `cppzmq`，它提供 C++ 头文件 `zmq.hpp`。仅安装 `zeromq` 是不够的。
+
 ---
 
-## 🔨 编译 Qt Manager
+---
 
-### **方法 1：使用 Visual Studio（推荐）**
+## 🔧 编译 Qt Manager
+
+### **⚠️ 重要：必须使用驱动器映射！**
+
+虽然 PowerShell 可以访问 UNC 路径（`\\wsl$\...`），但 **MSBuild 在编译时会调用 CMD**，导致编译失败：
+
+```
+CMD 不支持将 UNC 路径作为当前目录。
+error MSB3073: 命令已退出，代码为 1。
+```
+
+**解决方案：必须将 WSL 路径映射为 Windows 驱动器（如 Z:）**
+
+---
+
+### **步骤 1：映射 WSL 为驱动器**
+
+有三种方法，推荐使用 **方法 1（subst）**：
+
+#### **方法 1：使用 subst 命令（推荐）**
+
+```cmd
+# 创建虚拟驱动器映射
+subst Z: \\wsl$\Ubuntu\home\zd\A-Trader
+
+# 验证映射成功
+Z:
+dir
+```
+
+> ⚠️ **注意**：`subst` 创建的是临时映射，**重启后会消失**，需要重新执行。
+
+**永久化方案**：创建启动脚本 `setup_wsl_drive.bat`
+
+```batch
+@echo off
+echo 正在映射 WSL 驱动器...
+subst Z: \\wsl$\Ubuntu\home\zd\A-Trader
+if %errorlevel% equ 0 (
+    echo ✓ Z: 驱动器映射成功
+) else (
+    echo ✗ 映射失败，可能已经存在
+)
+```
+
+将此脚本快捷方式放入启动文件夹（Win+R 运行 `shell:startup`）即可开机自动映射。
+
+---
+
+#### **方法 2：使用 net use 命令（永久映射）**
+
+```cmd
+# 方法 2a：使用 wsl$ (推荐)
+net use Z: \\wsl$\Ubuntu\home\zd\A-Trader /persistent:yes
+
+# 方法 2b：使用 wsl.localhost (某些 Windows 版本)
+net use Z: \\wsl.localhost\Ubuntu\home\zd\A-Trader /persistent:yes
+
+# 验证映射成功
+Z:
+dir
+```
+
+> 💡 **提示**：`/persistent:yes` 表示重启后仍然保留映射
+
+> ⚠️ **注意**：如果提示"系统错误 64"，说明当前 PowerShell 正在使用 UNC 路径，请在新的 CMD 窗口中执行。
+
+---
+
+#### **方法 3：编译目录放在 Windows 文件系统（最稳定）**
+
+如果映射驱动器遇到问题，可以将编译目录放在 Windows 文件系统：
+
+```cmd
+# 创建 Windows 编译目录
+mkdir C:\Temp\A-Trader-build
+cd C:\Temp\A-Trader-build
+
+# 配置 CMake（源代码仍在 WSL）
+cmake \\wsl.localhost\Ubuntu\home\zd\A-Trader\qt_manager -G "Visual Studio 17 2022" ^
+    -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
+    -DCMAKE_PREFIX_PATH=D:\Qt\6.10.2\msvc2022_64
+
+# 编译
+cmake --build . --config Release
+```
+
+**优势**：
+- ✅ 无需映射驱动器
+- ✅ 编译速度更快
+- ✅ 避免 UNC 路径问题
+- ✅ 源代码仍在 WSL（自动同步）
+
+---
+
+### **步骤 2：编译 Qt Manager**
+
+#### **使用映射驱动器编译（方法 1 或 2）**
 
 ```cmd
 # 1. 打开 x64 Native Tools Command Prompt for VS 2022
 
-# 2. 进入 WSL 项目目录
-cd \\wsl$\Ubuntu\home\zd\A-Trader\qt_manager
+# 2. 进入映射的驱动器
+Z:
+cd qt_manager
 
-# 3. 创建 Windows 编译目录
+# 3. 清理旧编译（如果存在）
+rmdir /s /q build-windows
+
+# 4. 创建 Windows 编译目录
 mkdir build-windows
 cd build-windows
 
-# 4. 配置 CMake（使用 vcpkg）
+# 5. 配置 CMake
 cmake .. -G "Visual Studio 17 2022" ^
     -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-    -DCMAKE_PREFIX_PATH=C:\Qt\6.8.0\msvc2022_64
+    -DCMAKE_PREFIX_PATH=D:\Qt\6.10.2\msvc2022_64
 
-# 5. 编译
+# 6. 编译
 cmake --build . --config Release
 
-# 6. 可执行文件位置
-# \\wsl$\Ubuntu\home\zd\A-Trader\qt_manager\build-windows\Release\qt_manager.exe
+# 7. 可执行文件位置
+# Z:\qt_manager\build-windows\Release\qt_manager.exe
+```
+
+#### **使用 Windows 编译目录（方法 3）**
+
+```cmd
+# 1. 打开 x64 Native Tools Command Prompt for VS 2022
+
+# 2. 创建编译目录
+mkdir C:\Temp\A-Trader-build
+cd C:\Temp\A-Trader-build
+
+# 3. 配置 CMake
+cmake \\wsl.localhost\Ubuntu\home\zd\A-Trader\qt_manager -G "Visual Studio 17 2022" ^
+    -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
+    -DCMAKE_PREFIX_PATH=D:\Qt\6.10.2\msvc2022_64
+
+# 4. 编译
+cmake --build . --config Release
+
+# 5. 可执行文件位置
+# C:\Temp\A-Trader-build\Release\qt_manager.exe
 ```
 
 ### **方法 2：使用 Qt Creator（更简单）**
@@ -111,6 +243,42 @@ CMAKE_TOOLCHAIN_FILE = C:/vcpkg/scripts/buildsystems/vcpkg.cmake
 
 # 5. 点击 Build -> Build Project
 ```
+
+---
+
+## 📦 部署 Qt 依赖
+
+编译成功后，需要复制 Qt DLL 才能运行。
+
+### **方法 1：使用自动化脚本（推荐）**
+
+```cmd
+Z:
+cd qt_manager
+deploy_windows.bat
+```
+
+### **方法 2：手动部署**
+
+```cmd
+# 1. 进入 Release 目录
+Z:
+cd qt_manager\build-windows\Release
+
+# 2. 使用 windeployqt 复制 Qt DLL
+D:\Qt\6.10.2\msvc2022_64\bin\windeployqt.exe qt_manager.exe --qmldir Z:\qt_manager\qml
+
+# 3. 复制 ZeroMQ DLL
+copy C:\vcpkg\installed\x64-windows\bin\libzmq-*.dll .
+
+# 4. 创建配置文件
+echo {"connection":{"server_address":"localhost","pub_port":5555,"rep_port":5556}} > config.json
+```
+
+> 💡 **说明**：
+> - `windeployqt` 会自动复制所有需要的 Qt DLL
+> - `--qmldir` 参数指定 QML 文件位置，用于检测 QML 模块依赖
+> - ZeroMQ DLL 需要手动从 vcpkg 复制
 
 ---
 

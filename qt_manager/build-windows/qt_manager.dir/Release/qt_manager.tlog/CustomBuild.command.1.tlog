@@ -1,0 +1,30 @@
+^Z:\QT_MANAGER\QML\QML.QRC
+setlocal
+D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe --no-zstd --name qml --output Z:/qt_manager/build-windows/qrc_qml.cpp Z:/qt_manager/qml/qml.qrc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^Z:\QT_MANAGER\RESOURCES\RESOURCES.QRC
+setlocal
+D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe --no-zstd --name resources --output Z:/qt_manager/build-windows/qrc_resources.cpp Z:/qt_manager/resources/resources.qrc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^Z:\QT_MANAGER\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SZ:/qt_manager -BZ:/qt_manager/build-windows --check-stamp-file Z:/qt_manager/build-windows/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
 #include "network/ZmqWorker.h"
 #include "models/MarketModel.h"
 #include "models/PositionModel.h"
@@ -50,10 +51,19 @@ int main(int argc, char *argv[]) {
         qDebug() << "[Main] No config.json found, using default (127.0.0.1:5555/5556)";
     }
     
-    // 设置全局字体
-    QFont font("WenQuanYi Micro Hei");
-    font.setPixelSize(16);
+    // 从 QSettings 加载字体大小
+    QSettings settings;
+    settings.beginGroup("UI");  // UI 设置
+    int fontSize = settings.value("fontSize", 16).toInt();
+    settings.endGroup();
+    
+    // 设置全局字体（使用跨平台字体）
+    QFont font;
+    font.setPixelSize(fontSize);
+    font.setFamily("sans-serif");  // 跨平台默认字体
     app.setFont(font);
+    
+    qDebug() << "[Main] Font size:" << fontSize;
 
     QQmlApplicationEngine engine;
 
