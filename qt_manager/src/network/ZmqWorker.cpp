@@ -3,7 +3,7 @@
 #include <QDebug>
 #include <QCoreApplication>
 
-namespace atrad {
+namespace QuantLabs {
 
 ZmqWorker::ZmqWorker(QObject *parent)
     : QObject(parent),
@@ -31,8 +31,8 @@ void ZmqWorker::process() {
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ORDER_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::ORDER_DATA);
         _subscriber.set(zmq::sockopt::subscribe, zmq_topics::TRADE_DATA);
-        // Subscribe to Strategy/Condition updates (defined in atrad namespace)
-        _subscriber.set(zmq::sockopt::subscribe, atrad::TOPIC_STRATEGY);
+        // Subscribe to Strategy/Condition updates (defined in QuantLabs namespace)
+        _subscriber.set(zmq::sockopt::subscribe, QuantLabs::TOPIC_STRATEGY);
         
         _running = true;
         qDebug() << "[ZmqWorker] Connected and Subscribed to all topics";
@@ -65,26 +65,37 @@ void ZmqWorker::process() {
                 (void)_subscriber.recv(payload_msg, zmq::recv_flags::none);
                 
                 std::string topic = std::string(static_cast<char*>(topic_msg.data()), topic_msg.size());
-                QString payload = QString::fromUtf8(static_cast<char*>(payload_msg.data()), payload_msg.size());
+                
+                // Parse JSON exactly once here in the worker thread
+                QByteArray rawData(static_cast<char*>(payload_msg.data()), payload_msg.size());
+                QJsonDocument doc = QJsonDocument::fromJson(rawData);
+                
+                if (doc.isObject()) {
+                    QJsonObject jsonObj = doc.object();
 
-                if (topic == zmq_topics::MARKET_DATA) {
-                    emit tickReceived(payload);
-                    lastCtpActivity = std::chrono::steady_clock::now();
-                    ctpStatus = true;
-                } else if (topic == zmq_topics::POSITION_DATA) {
-                    emit positionReceived(payload);
-                } else if (topic == zmq_topics::ACCOUNT_DATA) {
-                    emit accountReceived(payload);
-                    lastCtpActivity = std::chrono::steady_clock::now(); // Account 也是 CTP 活动
-                    ctpStatus = true;
-                } else if (topic == zmq_topics::INSTRUMENT_DATA) {
-                    emit instrumentReceived(payload);
-                } else if (topic == zmq_topics::ORDER_DATA) {
-                    emit orderReceived(payload);
-                } else if (topic == zmq_topics::TRADE_DATA) {
-                    emit tradeReceived(payload);
-                } else if (topic == atrad::TOPIC_STRATEGY) {
-                    emit conditionOrderReceived(payload);
+                    if (topic == zmq_topics::MARKET_DATA) {
+                        emit tickReceived(jsonObj);
+                        lastCtpActivity = std::chrono::steady_clock::now();
+                        ctpStatus = true;
+                    } else if (topic == zmq_topics::POSITION_DATA) {
+                        emit positionReceived(jsonObj);
+                    } else if (topic == zmq_topics::ACCOUNT_DATA) {
+                        emit accountReceived(jsonObj);
+                        lastCtpActivity = std::chrono::steady_clock::now(); // Account 也是 CTP 活动
+                        ctpStatus = true;
+                    } else if (topic == zmq_topics::INSTRUMENT_DATA) {
+                        emit instrumentReceived(jsonObj);
+                    } else if (topic == zmq_topics::ORDER_DATA) {
+                        emit orderReceived(jsonObj);
+                    } else if (topic == zmq_topics::TRADE_DATA) {
+                        emit tradeReceived(jsonObj);
+                    } else if (topic == QuantLabs::TOPIC_STRATEGY) {
+                        emit conditionOrderReceived(jsonObj);
+                    }
+                } else {
+                     // Handle non-JSON payload if any (though currently all are JSON)
+                     // or log error
+                     // qWarning() << "[ZmqWorker] Received non-object JSON on topic:" << QString::fromStdString(topic);
                 }
             }
             
@@ -173,4 +184,4 @@ void ZmqWorker::sendCommand(const QString& json) {
     }
 }
 
-} // namespace atrad
+} // namespace QuantLabs

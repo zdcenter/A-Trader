@@ -34,7 +34,7 @@ int main() {
     }
 
     // 1. 初始化发布者 (行情广播)
-    atrad::Publisher pub;
+    QuantLabs::Publisher pub;
     // 使用配置文件中的端口，如果不存在则默认 5555
     int pub_port = j_config["zmq"].value("pub_port", 5555);
     std::string pub_addr = "tcp://*:" + std::to_string(pub_port);
@@ -43,10 +43,10 @@ int main() {
 
     // 2. 初始化数据库
     std::string db_conn = j_config["database"]["connection_string"];
-    atrad::DBManager::instance().init(db_conn);
+    QuantLabs::DBManager::instance().init(db_conn);
     
     // 2.1 从数据库加载订阅列表
-    std::vector<std::string> db_subs = atrad::DBManager::instance().loadSubscriptions();
+    std::vector<std::string> db_subs = QuantLabs::DBManager::instance().loadSubscriptions();
     if (db_subs.empty()) {
         std::cout << "[Main] No subscriptions found in DB." << std::endl;
     }
@@ -70,10 +70,10 @@ int main() {
     
     // 4. 初始化行情处理器 (MdHandler 需要 set)
     std::set<std::string> sub_set(db_subs.begin(), db_subs.end());
-    atrad::MdHandler md_handler(pub, handler_config, sub_set);
+    QuantLabs::MdHandler md_handler(pub, handler_config, sub_set);
     
     // 5. 初始化交易处理器
-    atrad::TraderHandler td_handler(handler_config, pub);
+    QuantLabs::TraderHandler td_handler(handler_config, pub);
     
     // 5.1 注册费率查询任务
     for (const auto& id : db_subs) {
@@ -81,10 +81,10 @@ int main() {
     }
 
     // 5.2 初始化条件单引擎
-    auto condition_engine = std::make_unique<atrad::ConditionEngine>(td_handler);
+    auto condition_engine = std::make_unique<QuantLabs::ConditionEngine>(td_handler);
     
     // 5.3 从数据库恢复未完成的条件单
-    auto restored_orders = atrad::DBManager::instance().loadConditionOrders();
+    auto restored_orders = QuantLabs::DBManager::instance().loadConditionOrders();
     for (const auto& o : restored_orders) {
         // addConditionOrder 会重新 upsert 到 DB (无害) 并加入内存监控
         condition_engine->addConditionOrder(o);
@@ -97,9 +97,9 @@ int main() {
     });
 
     // 连接条件单状态回调 (Push to Frontend)
-    condition_engine->setStatusCallback([&](const atrad::ConditionOrderRequest& order) {
+    condition_engine->setStatusCallback([&](const QuantLabs::ConditionOrderRequest& order) {
         json j;
-        j["type"] = atrad::CmdType::RtnConditionOrder;
+        j["type"] = QuantLabs::CmdType::RtnConditionOrder;
         
         json data;
         data["request_id"] = order.request_id;
@@ -114,11 +114,11 @@ int main() {
         data["strategy_id"] = order.strategy_id;
         
         j["data"] = data;
-        pub.publish(atrad::TOPIC_STRATEGY, j.dump());
+        pub.publish(QuantLabs::TOPIC_STRATEGY, j.dump());
     });
 
     // 6. 初始化指令服务器 (接收前端下单)
-    atrad::CommandServer cmd_server;
+    QuantLabs::CommandServer cmd_server;
     int rep_port = j_config["zmq"].value("rep_port", 5556);
     std::string rep_addr = "tcp://*:" + std::to_string(rep_port);
 
@@ -127,7 +127,7 @@ int main() {
     std::map<std::string, CommandHandler> handlers;
 
     // 1. 下单
-    handlers[atrad::CmdType::Order] = [&](const json& req) {
+    handlers[QuantLabs::CmdType::Order] = [&](const json& req) {
         std::string id = req["id"];
         double price = req["price"];
         int vol = req["vol"];
@@ -147,15 +147,22 @@ int main() {
             // 前端可能传 "CLOSE", "CLOSETODAY", "1", "3" 等
             if (o == "CLOSE" || o == "1") off = THOST_FTDC_OF_Close;
             else if (o == "CLOSETODAY" || o == "3") off = THOST_FTDC_OF_CloseToday;
-            else if (o == "CLOSEYESTERDAY" || o == "4") off = THOST_FTDC_OF_CloseYesterday; // CTP usually auto handles yesterday via Close, but SHFE needs explicit sometimes if we want CloseYesterday
+            else if (o == "CLOSEYESTERDAY" || o == "4") off = THOST_FTDC_OF_CloseYesterday; 
         }
         
-        td_handler.insertOrder(id, price, vol, dir, off);
+        // 解析 PriceType
+        char priceType = THOST_FTDC_OPT_LimitPrice;
+        if (req.contains("price_type")) {
+             std::string pt = req["price_type"];
+             if (!pt.empty()) priceType = pt[0];
+        }
+        
+        td_handler.insertOrder(id, price, vol, dir, off, priceType);
         return "{\"status\":\"ok\",\"msg\":\"Order sent to CTP\"}";
     };
     
     // 1.5 撤单
-    handlers[atrad::CmdType::OrderAction] = [&](const json& req) -> std::string {
+    handlers[QuantLabs::CmdType::OrderAction] = [&](const json& req) -> std::string {
         if (!req.contains("data")) return "{\"status\":\"error\",\"msg\":\"No data field\"}";
         auto& d = req["data"];
         
@@ -171,7 +178,7 @@ int main() {
     };
 
     // 2. 订阅
-    handlers[atrad::CmdType::Subscribe] = [&](const json& req) {
+    handlers[QuantLabs::CmdType::Subscribe] = [&](const json& req) {
         std::string id = req["id"];
         if (id.empty()) return "{\"status\":\"error\",\"msg\":\"Empty ID\"}";
         md_handler.subscribe(id);
@@ -180,7 +187,7 @@ int main() {
     };
 
     // 3. 退订
-    handlers[atrad::CmdType::Unsubscribe] = [&](const json& req) {
+    handlers[QuantLabs::CmdType::Unsubscribe] = [&](const json& req) {
         std::string id = req["id"];
         if (id.empty()) return "{\"status\":\"error\",\"msg\":\"Empty ID\"}";
         md_handler.unsubscribe(id);
@@ -188,12 +195,12 @@ int main() {
     };
 
     // 4. 心跳
-    handlers[atrad::CmdType::Ping] = [](const json&) {
-        return "{\"type\":\"" + atrad::CmdType::Pong + "\"}";
+    handlers[QuantLabs::CmdType::Ping] = [](const json&) {
+        return "{\"type\":\"" + QuantLabs::CmdType::Pong + "\"}";
     };
 
     // 5. 状态同步
-    handlers[atrad::CmdType::SyncState] = [&](const json&) {
+    handlers[QuantLabs::CmdType::SyncState] = [&](const json&) {
         std::cout << "[Main] Sync State requested by Client." << std::endl;
         td_handler.qryAccount();
         td_handler.pushCachedPositions();
@@ -204,11 +211,11 @@ int main() {
     };
 
     // 6. 条件单
-    handlers[atrad::CmdType::ConditionOrderInsert] = [&](const json& req) {
+    handlers[QuantLabs::CmdType::ConditionOrderInsert] = [&](const json& req) {
         // std::cout << "[Main] Condition Order Received: " << req["data"].dump() << std::endl;
         auto& d = req["data"];
         
-        atrad::ConditionOrderRequest order;
+        QuantLabs::ConditionOrderRequest order;
         std::string inst = d.value("instrument_id", "");
         if (inst.empty()) return "{\"status\":\"error\",\"msg\":\"Missing instrument_id\"}";
         std::strncpy(order.instrument_id, inst.c_str(), sizeof(order.instrument_id));
@@ -219,7 +226,7 @@ int main() {
         int cmp = 0;
         if (d.contains("compare_type")) cmp = d["compare_type"];
         else if (d.contains("condition_compare")) cmp = d["condition_compare"];
-        order.compare_type = static_cast<atrad::CompareType>(cmp);
+        order.compare_type = static_cast<QuantLabs::CompareType>(cmp);
         
         // Handle Direction (String or Int)
         if (d["direction"].is_string()) {
@@ -262,7 +269,7 @@ int main() {
         return "{\"status\":\"ok\",\"msg\":\"Condition Order Accepted\"}";
     };
 
-    handlers[atrad::CmdType::ConditionOrderCancel] = [&](const json& req) -> std::string {
+    handlers[QuantLabs::CmdType::ConditionOrderCancel] = [&](const json& req) -> std::string {
         if (!req.contains("data")) return "{\"status\":\"error\",\"msg\":\"No data field\"}";
         auto& data = req["data"];
         if (!data.contains("request_id")) return "{\"status\":\"error\",\"msg\":\"Missing request_id\"}";
@@ -277,7 +284,7 @@ int main() {
         }
     };
 
-    handlers[atrad::CmdType::ConditionOrderModify] = [&](const json& req) -> std::string {
+    handlers[QuantLabs::CmdType::ConditionOrderModify] = [&](const json& req) -> std::string {
         if (!req.contains("data")) return "{\"status\":\"error\",\"msg\":\"No data field\"}";
         auto& data = req["data"];
         if (!data.contains("request_id") || !data.contains("trigger_price") || 
@@ -299,16 +306,16 @@ int main() {
         }
     };
 
-    handlers[atrad::CmdType::ConditionOrderQuery] = [&](const json&) -> std::string {
+    handlers[QuantLabs::CmdType::ConditionOrderQuery] = [&](const json&) -> std::string {
         std::cout << "[Main] Received ConditionOrderQuery..." << std::endl;
         // Load ALL (active + history) for frontend display
-        auto pending_orders = atrad::DBManager::instance().loadConditionOrders(false);
+        auto pending_orders = QuantLabs::DBManager::instance().loadConditionOrders(false);
         std::cout << "[Main] Query: Found " << pending_orders.size() << " orders in DB. Pushing to ZMQ..." << std::endl;
         
         // Push each pending order to frontend via PUB
         for (const auto& o : pending_orders) {
             json j;
-            j["type"] = atrad::CmdType::RtnConditionOrder;
+            j["type"] = QuantLabs::CmdType::RtnConditionOrder;
             
             json data;
             data["request_id"] = o.request_id;
@@ -323,30 +330,33 @@ int main() {
             data["strategy_id"] = o.strategy_id;
             
             j["data"] = data;
-            pub.publish(atrad::TOPIC_STRATEGY, j.dump());
+            pub.publish(QuantLabs::TOPIC_STRATEGY, j.dump());
         }
 
         return "{\"status\":\"ok\",\"msg\":\"Query Request Accepted, Pushing Data...\"}";
     };
 
-    handlers[atrad::CmdType::StrategyQuery] = [&](const json&) -> std::string {
-        auto strategies = atrad::DBManager::instance().loadStrategies();
+    handlers[QuantLabs::CmdType::StrategyQuery] = [&](const json&) -> std::string {
+        auto strategies = QuantLabs::DBManager::instance().loadStrategies();
         json j_list = json::array();
         for (const auto& p : strategies) {
-            j_list.push_back({{"id", p.first}, {"name", p.second}});
+            json item;
+            item["id"] = p.first;
+            item["name"] = p.second;
+            j_list.push_back(item);
         }
         json msg;
-        msg["type"] = atrad::CmdType::RtnStrategyList;
+        msg["type"] = QuantLabs::CmdType::RtnStrategyList;
         msg["data"] = j_list;
         
         // Also push to generic strategy topic for async updates
-        pub.publish(atrad::TOPIC_STRATEGY, msg.dump());
+        pub.publish(QuantLabs::TOPIC_STRATEGY, msg.dump());
         
         return msg.dump();
     };
 
     // 启动服务，分发指令
-    cmd_server.start(rep_addr, [&](const nlohmann::json& req) -> std::string {
+    cmd_server.start(rep_addr, [&](const json& req) -> std::string {
         // std::cout << "[Main] Received Command: " << req.dump() << std::endl;
         
         if (req.contains("type")) {

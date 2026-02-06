@@ -3,7 +3,7 @@
 #include "utils/Encoding.h"
 #include <iostream>
 
-namespace atrad {
+namespace QuantLabs {
 
 Publisher::Publisher() 
     : context_(std::make_unique<zmq::context_t>(1)),
@@ -24,48 +24,47 @@ void Publisher::init(const std::string& addr) {
 }
 
 void Publisher::publishTick(const TickData& data) {
-    nlohmann::json j;
-    j["instrument_id"] = data.instrument_id;
-    j["last_price"] = data.last_price;
-    j["volume"] = data.volume;
-    j["open_interest"] = data.open_interest;
-    
-    // 5档行情 使用标准数组或明确的字段
-    j["bid_price1"] = data.bid_price1; j["bid_volume1"] = data.bid_volume1;
-    j["ask_price1"] = data.ask_price1; j["ask_volume1"] = data.ask_volume1;
-    j["bid_price2"] = data.bid_price2; j["bid_volume2"] = data.bid_volume2;
-    j["ask_price2"] = data.ask_price2; j["ask_volume2"] = data.ask_volume2;
-    j["bid_price3"] = data.bid_price3; j["bid_volume3"] = data.bid_volume3;
-    j["ask_price3"] = data.ask_price3; j["ask_volume3"] = data.ask_volume3;
-    j["bid_price4"] = data.bid_price4; j["bid_volume4"] = data.bid_volume4;
-    j["ask_price4"] = data.ask_price4; j["ask_volume4"] = data.ask_volume4;
-    j["bid_price5"] = data.bid_price5; j["bid_volume5"] = data.bid_volume5;
-    j["ask_price5"] = data.ask_price5; j["ask_volume5"] = data.ask_volume5;
-    
-    j["update_time"] = data.update_time;
-    j["update_millisec"] = data.update_millisec;
-    
-    j["turnover"] = data.turnover;
-    j["pre_close_price"] = data.pre_close_price;
-    j["pre_settlement_price"] = data.pre_settlement_price;
-    j["upper_limit_price"] = data.upper_limit_price;
-    j["lower_limit_price"] = data.lower_limit_price;
-    j["open_price"] = data.open_price;
-    j["highest_price"] = data.highest_price;
-    j["lowest_price"] = data.lowest_price;
-    j["close_price"] = data.close_price;
-    j["settlement_price"] = data.settlement_price;
-    j["average_price"] = data.average_price;
-    j["action_day"] = data.action_day;
-    j["trading_day"] = data.trading_day;
+    // OPTIMIZATION: Use snprintf instead of nlohmann::json for high-frequency tick data.
+    // This avoids dynamic allocation and map lookups for every tick.
+    char buffer[2048];
+    int len = snprintf(buffer, sizeof(buffer),
+        "{"
+        "\"instrument_id\":\"%s\","
+        "\"last_price\":%.8g,\"volume\":%d,\"open_interest\":%.8g,\"turnover\":%.8g,"
+        "\"pre_close_price\":%.8g,\"pre_settlement_price\":%.8g,"
+        "\"upper_limit_price\":%.8g,\"lower_limit_price\":%.8g,"
+        "\"open_price\":%.8g,\"highest_price\":%.8g,\"lowest_price\":%.8g,\"close_price\":%.8g,"
+        "\"settlement_price\":%.8g,\"average_price\":%.8g,"
+        "\"bid_price1\":%.8g,\"bid_volume1\":%d,\"ask_price1\":%.8g,\"ask_volume1\":%d,"
+        "\"bid_price2\":%.8g,\"bid_volume2\":%d,\"ask_price2\":%.8g,\"ask_volume2\":%d,"
+        "\"bid_price3\":%.8g,\"bid_volume3\":%d,\"ask_price3\":%.8g,\"ask_volume3\":%d,"
+        "\"bid_price4\":%.8g,\"bid_volume4\":%d,\"ask_price4\":%.8g,\"ask_volume4\":%d,"
+        "\"bid_price5\":%.8g,\"bid_volume5\":%d,\"ask_price5\":%.8g,\"ask_volume5\":%d,"
+        "\"action_day\":\"%s\",\"trading_day\":\"%s\","
+        "\"update_time\":\"%s\",\"update_millisec\":%d"
+        "}",
+        data.instrument_id,
+        data.last_price, data.volume, data.open_interest, data.turnover,
+        data.pre_close_price, data.pre_settlement_price,
+        data.upper_limit_price, data.lower_limit_price,
+        data.open_price, data.highest_price, data.lowest_price, data.close_price,
+        data.settlement_price, data.average_price,
+        data.bid_price1, data.bid_volume1, data.ask_price1, data.ask_volume1,
+        data.bid_price2, data.bid_volume2, data.ask_price2, data.ask_volume2,
+        data.bid_price3, data.bid_volume3, data.ask_price3, data.ask_volume3,
+        data.bid_price4, data.bid_volume4, data.ask_price4, data.ask_volume4,
+        data.bid_price5, data.bid_volume5, data.ask_price5, data.ask_volume5,
+        data.action_day, data.trading_day,
+        data.update_time, data.update_millisec
+    );
 
-    std::string payload = j.dump();
-
-    publisher_->send(zmq::message_t(zmq_topics::MARKET_DATA, 2), zmq::send_flags::sndmore);
-    publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
+    if (len > 0) {
+        publisher_->send(zmq::message_t(zmq_topics::MARKET_DATA, 2), zmq::send_flags::sndmore);
+        publisher_->send(zmq::message_t(buffer, len), zmq::send_flags::none);
+    }
 }
 
-void Publisher::publishPosition(const PositionData& data) {
+void Publisher::publishPosition(const PositionData& data, int64_t snapshot_seq) {
     nlohmann::json j;
     j["instrument_id"] = data.instrument_id;
     j["direction"] = std::string(1, data.direction); // char to string
@@ -74,6 +73,7 @@ void Publisher::publishPosition(const PositionData& data) {
     j["yd_position"] = data.yd_position;
     j["position_cost"] = data.position_cost;
     j["pos_profit"] = data.pos_profit;
+    j["snapshot_seq"] = snapshot_seq; // 批次号
 
     std::string payload = j.dump();
     
@@ -99,7 +99,7 @@ void Publisher::publishAccount(const AccountData& data) {
 void Publisher::publishInstrument(const InstrumentData& data) {
     nlohmann::json j;
     j["instrument_id"] = data.instrument_id;
-    j["instrument_name"] = atrad::utils::gbk_to_utf8(data.instrument_name);
+    j["instrument_name"] = QuantLabs::utils::gbk_to_utf8(data.instrument_name);
     j["exchange_id"] = data.exchange_id;
     j["volume_multiple"] = data.volume_multiple;
     j["price_tick"] = data.price_tick;
@@ -142,7 +142,7 @@ void Publisher::publishOrder(const CThostFtdcOrderField* pOrder) {
     j["volume_total"] = pOrder->VolumeTotal; // 剩余数量
     
     j["order_status"] = std::string(1, pOrder->OrderStatus); // 报单状态
-    j["status_msg"] = atrad::utils::gbk_to_utf8(pOrder->StatusMsg); // 状态信息
+    j["status_msg"] = QuantLabs::utils::gbk_to_utf8(pOrder->StatusMsg); // 状态信息
     j["exchange_id"] = pOrder->ExchangeID; // Added
     
     j["insert_time"] = pOrder->InsertTime;
@@ -207,4 +207,4 @@ void Publisher::publish(const std::string& topic, const std::string& message) {
     publisher_->send(m, zmq::send_flags::none);
 }
 
-} // namespace atrad
+} // namespace QuantLabs

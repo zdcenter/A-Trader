@@ -99,6 +99,11 @@ FocusScope {
                 required property int todayPosition
                 required property string avgPrice
                 required property double lastPrice
+                required property double bidPrice1
+                required property double askPrice1
+                required property double priceTick
+                required property double upperLimit
+                required property double lowerLimit
                 required property string profit
                 
                 // 统一的选中和悬停样式
@@ -200,9 +205,47 @@ FocusScope {
 
                         if (orderController) {
                             orderController.instrumentId = instrumentId
-                            orderController.price = lastPrice
                             
                             var actionDir = (direction === "BUY") ? "SELL" : "BUY"
+                            var finalPrice = lastPrice
+                            
+                            // Strategy: Opponent Price +/- 5 Ticks (Aggressive Limit)
+                            // If Bid/Ask is valid, use it. Otherwise fallback to LastPrice +/- 2%
+                            var ticks = 5
+                            var tickSize = priceTick > 0 ? priceTick : 1.0 // Default fallback?
+                            
+                            if (actionDir === "SELL") { // Close Long
+                                if (bidPrice1 > 0) {
+                                     // Sell into the Bid (Aggressive: lower than bid)
+                                     finalPrice = bidPrice1 - (ticks * tickSize)
+                                } else {
+                                     finalPrice = lastPrice * 0.98 // Fallback
+                                }
+                                // Safety: Ensure > 0
+                                if (finalPrice < 0) finalPrice = 0.0
+                            } else { // Close Short (Buy)
+                                if (askPrice1 > 0) {
+                                     // Buy into the Ask (Aggressive: higher than ask)
+                                     finalPrice = askPrice1 + (ticks * tickSize)
+                                } else {
+                                     finalPrice = lastPrice * 1.02 // Fallback
+                                }
+                            }
+
+                            // If priceTick is known, round to tick
+                            if (priceTick > 0) {
+                                var ratio = Math.round(finalPrice / priceTick)
+                                finalPrice = ratio * priceTick
+                            }
+                            
+                            // Clamp to Limits (if available)
+                            if (upperLimit > 0 && finalPrice > upperLimit) finalPrice = upperLimit
+                            if (lowerLimit > 0 && finalPrice < lowerLimit) finalPrice = lowerLimit
+
+                            // Final safety check
+                            if (finalPrice <= 0.0001) finalPrice = 0.0
+
+                            orderController.price = finalPrice
                             
                             var isShfe = false
                             if (exchangeId && exchangeId !== "") {
@@ -214,23 +257,20 @@ FocusScope {
                                 isShfe = shfePrefixes.indexOf(prefix) !== -1
                             }
                             
-                            console.log("[QuickClose] DoubleClick: " + instrumentId + " Dir:" + actionDir + " IsShfe:" + isShfe)
+                            console.log("[QuickClose] " + instrumentId + " Dir:" + actionDir + " Price:" + finalPrice + " (Bid:" + bidPrice1 + " Ask:" + askPrice1 + ")" + " Limits:" + lowerLimit + "/" + upperLimit)
                             
                             if (isShfe) {
                                 if (todayPosition > 0) {
                                     orderController.volume = todayPosition
-                                    orderController.sendOrder(actionDir, "CLOSETODAY")
-                                    console.log(" -> CloseToday Vol:" + todayPosition)
+                                    orderController.sendOrder(actionDir, "CLOSETODAY", "MARKET")
                                 }
                                 if (ydPosition > 0) {
                                     orderController.volume = ydPosition
-                                    orderController.sendOrder(actionDir, "CLOSE")
-                                    console.log(" -> CloseYesterday Vol:" + ydPosition)
+                                    orderController.sendOrder(actionDir, "CLOSE", "MARKET")
                                 }
                             } else {
                                 orderController.volume = position
-                                orderController.sendOrder(actionDir, "CLOSE")
-                                console.log(" -> Close Vol:" + position)
+                                orderController.sendOrder(actionDir, "CLOSE", "MARKET")
                             }
                         }
                     }

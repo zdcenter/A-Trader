@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/">
-        <file>sounds/condition_triggered.wav</file>
-        <file>sounds/condition_cancelled.wav</file>
+        <file>sounds/success1.wav</file>
+        <file>sounds/success2.wav</file>
+        <file>sounds/fail1.wav</file>
+        <file>sounds/trade1.wav</file>
+        <file>app_icon.png</file>
     </qresource>
 </RCC>

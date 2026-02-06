@@ -88,8 +88,8 @@ FocusScope {
                 
                 // 统一的选中和悬停样式
                 color: {
-                    if (mouseArea.containsMouse && tradeListView.currentIndex === index) return "#3a5a7a"
-                    if (tradeListView.currentIndex === index) return "#2c5d87"
+                    if (mouseArea.containsMouse && ListView.isCurrentItem) return "#3a5a7a"
+                    if (ListView.isCurrentItem) return "#2c5d87"
                     if (mouseArea.containsMouse) return "#2a2a2a"
                     return index % 2 === 0 ? "#1e1e1e" : "#252526"
                 }

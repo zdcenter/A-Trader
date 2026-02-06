@@ -1,8 +1,9 @@
 #include "models/TradeModel.h"
-#include <nlohmann/json.hpp>
-#include <QDebug>
 
-namespace atrad {
+#include <QDebug>
+#include <QThread>
+
+namespace QuantLabs {
 
 TradeModel::TradeModel(QObject *parent) : QAbstractListModel(parent) {}
 
@@ -48,22 +49,25 @@ QHash<int, QByteArray> TradeModel::roleNames() const {
     return roles;
 }
 
-void TradeModel::onTradeReceived(const QString& json) {
+void TradeModel::onTradeReceived(const QJsonObject& j) {
+    if (QThread::currentThread() != this->thread()) {
+        QMetaObject::invokeMethod(this, "onTradeReceived", Qt::QueuedConnection, Q_ARG(QJsonObject, j));
+        return;
+    }
+    
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
-        
         TradeItem item;
-        item.instrument_id = QString::fromStdString(j.value("instrument_id", ""));
-        item.trade_id = QString::fromStdString(j.value("trade_id", ""));
-        item.order_sys_id = QString::fromStdString(j.value("order_sys_id", ""));
-        item.direction = QString::fromStdString(j.value("direction", ""));
-        item.offset_flag = QString::fromStdString(j.value("offset_flag", ""));
-        item.price = j.value("price", 0.0);
-        item.volume = j.value("volume", 0);
-        item.commission = j.value("commission", 0.0);
-        item.close_profit = j.value("close_profit", 0.0);
-        item.trade_time = QString::fromStdString(j.value("trade_time", ""));
-        item.trade_date = QString::fromStdString(j.value("trade_date", ""));
+        item.instrument_id = j["instrument_id"].toString();
+        item.trade_id = j["trade_id"].toString();
+        item.order_sys_id = j["order_sys_id"].toString();
+        item.direction = j["direction"].toString();
+        item.offset_flag = j["offset_flag"].toString();
+        item.price = j["price"].toDouble();
+        item.volume = j["volume"].toInt();
+        item.commission = j["commission"].toDouble();
+        item.close_profit = j["close_profit"].toDouble();
+        item.trade_time = j["trade_time"].toString();
+        item.trade_date = j["trade_date"].toString();
         
         // 查重 (TradeID 唯一)
         bool exists = false;
@@ -95,11 +99,13 @@ void TradeModel::onTradeReceived(const QString& json) {
             beginInsertRows(QModelIndex(), index, index);
             _trades.insert(it, item);
             endInsertRows();
+            
+            emit tradeSoundTriggered();
         }
 
     } catch (const std::exception& e) {
-        qDebug() << "[TradeModel] JSON Parse Error:" << e.what();
+        qDebug() << "[TradeModel] Error:" << e.what();
     }
 }
 
-} // namespace atrad
+} // namespace QuantLabs

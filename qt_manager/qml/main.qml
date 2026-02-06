@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Qt.labs.settings
+import QtMultimedia
 import "."
 
 ApplicationWindow {
@@ -41,6 +42,57 @@ ApplicationWindow {
         category: "Trade"
         property int defaultVolume: 1
         property int defaultPriceType: 0
+    }
+    
+    // 声音设置
+    Settings {
+        id: soundSettings
+        category: "Sound"
+        property bool enableOrderSound: true
+        property bool enableTradeSound: true
+        property int volume: 50
+    }
+
+    // 声音效果
+    SoundEffect {
+        id: soundOrderSuccess
+        source: "qrc:/sounds/success1.wav"
+        volume: soundSettings.volume / 100.0
+    }
+    SoundEffect {
+        id: soundOrderFail
+        source: "qrc:/sounds/fail1.wav"
+        volume: soundSettings.volume / 100.0
+    }
+    SoundEffect {
+        id: soundOrderCancel // 使用 success2 作为撤单音
+        source: "qrc:/sounds/success2.wav" 
+        volume: soundSettings.volume / 100.0
+    }
+    SoundEffect {
+        id: soundTrade
+        source: "qrc:/sounds/trade1.wav"
+        volume: soundSettings.volume / 100.0
+    }
+
+    // 声音信号连接
+    Connections {
+        target: AppOrderModel
+        function onOrderSoundTriggered(type) {
+            if (!soundSettings.enableOrderSound) return;
+            // console.log("Sound Trigger:" + type);
+            if (type === "success") soundOrderSuccess.play();
+            else if (type === "fail") soundOrderFail.play();
+            else if (type === "cancel") soundOrderCancel.play();
+        }
+    }
+
+    Connections {
+        target: AppTradeModel
+        function onTradeSoundTriggered() {
+            if (!soundSettings.enableTradeSound) return;
+            soundTrade.play();
+        }
     }
     
     Component.onCompleted: {
@@ -465,5 +517,6 @@ ApplicationWindow {
         id: settingsWin
         mainWindow: appWindow
         property var tradeSettings: globalTradeSettings
+        soundSettings: soundSettings
     }
 }

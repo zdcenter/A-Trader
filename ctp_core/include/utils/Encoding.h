@@ -6,7 +6,7 @@
 #include <cstring>
 #include <iostream>
 
-namespace atrad {
+namespace QuantLabs {
 namespace utils {
 
 inline std::string gbk_to_utf8(const std::string& gbk_str) {

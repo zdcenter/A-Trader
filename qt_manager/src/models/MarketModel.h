@@ -4,9 +4,10 @@
 #include <QHash>
 #include <QVector>
 #include <QString>
+#include <QJsonObject>
 #include "../../../shared/protocol/message_schema.h"
 
-namespace atrad {
+namespace QuantLabs {
 
 struct MarketItem {
     TickData data;
@@ -55,9 +56,9 @@ public slots:
      * @brief 更新或添加行情的 JSON 数据
      * @param json 来自 ZmqWorker 的消息
      */
-    void updateTick(const QString& json);
+    void updateTick(const QJsonObject& json);
     // 处理合约信息 (订阅后立即显示)
-    void handleInstrument(const QString& json);
+    void handleInstrument(const QJsonObject& json);
     void removeInstrument(const QString& instrumentId);
     
     // 手动添加合约（用于UI订阅时立即显示）
@@ -77,9 +78,11 @@ public slots:
     // 检查合约是否已存在
     Q_INVOKABLE bool hasInstrument(const QString& instrumentId) const;
 
+    Q_INVOKABLE QVariantMap getMarketData(const QString& instrumentId) const;
+
 private:
     QVector<MarketItem> _market_data;
     QHash<QString, int> _instrument_to_index; // 快速索引
 };
 
-} // namespace atrad
+} // namespace QuantLabs

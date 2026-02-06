@@ -491,7 +491,10 @@ FocusScope {
                     
                     // 选中和斑马纹背景
                     color: {
+                        if (ListView.isCurrentItem) return "#2c3e50" // 当前选中
                         if (root.selectedSet[model.instrumentId]) return "#3e4452" // 多选高亮
+                        
+                        // 外部同步选中 (仅当 CurrentItem 未命中时检查)
                         if (orderController && orderController.instrumentId === model.instrumentId) {
                             return "#2c3e50"
                         }
@@ -537,7 +540,7 @@ FocusScope {
                         width: 3
                         height: parent.height
                         color: "#569cd6"
-                        visible: orderController && orderController.instrumentId === model.instrumentId
+                        visible: ListView.isCurrentItem || (orderController && orderController.instrumentId === model.instrumentId)
                         z: 2
                     }
                     
@@ -584,6 +587,9 @@ FocusScope {
                         onClicked: function(mouse) {
                             if (rowDragItem.visible) return;
                             
+                            // 立即设置当前索引 (最快反馈)
+                            marketListView.currentIndex = index
+                            
                             var id = model.instrumentId
                             
                             if (mouse.button === Qt.LeftButton) {
@@ -597,11 +603,10 @@ FocusScope {
                                     // 即使是多选，也将最后点击的设为当前活动
                                     if (orderController) orderController.instrumentId = id
                                 } else {
-                                    // 单选：清空其他，选中当前
-                                    root.selectedSet = {}
-                                    var s = {}
-                                    s[id] = true
-                                    root.selectedSet = s
+                                    // 单选：仅在必要时清理多选集合
+                                    if (Object.keys(root.selectedSet).length > 0) {
+                                        root.selectedSet = {}
+                                    }
                                     
                                     if (orderController) orderController.instrumentId = id
                                     // 尝试设置价格

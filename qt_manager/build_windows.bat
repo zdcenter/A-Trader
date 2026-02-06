@@ -55,10 +55,22 @@ if %errorlevel% neq 0 (
 )
 
 REM Create config file
-echo [5/5] Creating config file...
+echo [5/5] Handling config files...
 cd Release
-if not exist config.json (
-    echo {"connection":{"server_address":"localhost","pub_port":5555,"rep_port":5556}} > config.json
+
+REM 1. Always copy the example config (Overwrite)
+copy "..\..\config.example.json" "config.example.json" /Y >nul
+
+REM 2. Copy local config.json if it exists in source root (Overwrite build version)
+if exist "..\..\config.json" (
+    echo [Info] Copying local config.json from source root...
+    copy "..\..\config.json" "config.json" /Y >nul
+) else (
+    REM 3. If source config doesn't exist AND build config doesn't exist, create default
+    if not exist config.json (
+        echo [Info] Creating default localhost config.json...
+        echo {"connection":{"server_address":"localhost","pub_port":5555,"rep_port":5556}} > config.json
+    )
 )
 
 echo.

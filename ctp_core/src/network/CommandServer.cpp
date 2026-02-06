@@ -2,7 +2,7 @@
 #include "network/CommandServer.h"
 #include <iostream>
 
-namespace atrad {
+namespace QuantLabs {
 
 CommandServer::CommandServer() : context_(1) {}
 
@@ -53,4 +53,4 @@ void CommandServer::run() {
     }
 }
 
-} // namespace atrad
+} // namespace QuantLabs

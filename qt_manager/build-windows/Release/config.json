@@ -1,1 +1,7 @@
-{"connection":{"server_address":"localhost","pub_port":5555,"rep_port":5556}} 
+{
+    "connection": {
+        "server_address": "localhost",
+        "pub_port": 5555,
+        "rep_port": 5556
+    }
+}

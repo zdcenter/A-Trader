@@ -3,7 +3,7 @@
 #include <string>
 #include <cstdint>
 
-namespace atrad {
+namespace QuantLabs {
 
 /**
  * @brief 行情数据结构 (Tick Data)
@@ -237,4 +237,4 @@ namespace CmdType {
     const std::string RtnStrategyList = "rtn_strategy_list"; // Added
 }
 
-} // namespace atrad
+} // namespace QuantLabs

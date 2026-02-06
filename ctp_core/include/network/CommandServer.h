@@ -6,7 +6,7 @@
 #include <atomic>
 #include <functional>
 
-namespace atrad {
+namespace QuantLabs {
 
 /**
  * @brief ZMQ REP 服务器
@@ -32,4 +32,4 @@ private:
     zmq::context_t context_;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

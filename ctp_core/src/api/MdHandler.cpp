@@ -6,7 +6,7 @@
 
 #include "storage/DBManager.h"
 
-namespace atrad {
+namespace QuantLabs {
 
 MdHandler::MdHandler(Publisher& pub, std::map<std::string, std::string> config, std::set<std::string> contracts) 
     : md_api_(nullptr), pub_(pub), contracts_(contracts) {
@@ -86,9 +86,15 @@ void MdHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, CThos
 void MdHandler::OnRtnDepthMarketData(CThostFtdcDepthMarketDataField *pData) {
     if (!pData) return;
 
-    // 过滤掉无效数据
-    if (pData->LastPrice > 1e12 || pData->LastPrice < 0) return;
+    // CTP 有时会推送 DBL_MAX 作为空值，必须过滤
+    // 1e12 (一万亿) 是一个安全的上限，远超任何真实价格
+    if (pData->LastPrice > 1e12) return; 
+    
+    // 如果您确定不交易组合合约(Spread)，保留 < 0 过滤也是好的防错措施
+    // 但如果做组合合约，则应移除 || pData->LastPrice < 0
+    if (pData->LastPrice < 0) return; 
 
+    // 只有数据有效才触发回调和后续处理
     if (tick_callback_) tick_callback_(pData);
 
     TickData tick;
@@ -183,4 +189,4 @@ void MdHandler::unsubscribe(const std::string& instrument) {
     }
 }
 
-} // namespace atrad
+} // namespace QuantLabs

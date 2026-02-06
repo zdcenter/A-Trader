@@ -5,10 +5,11 @@
 #include <QHash>
 #include <QVariant>
 #include <QList>
+#include <QJsonObject>
 #include <nlohmann/json.hpp>
 #include "protocol/message_schema.h" // Shared Schema
 
-namespace atrad {
+namespace QuantLabs {
 
 class OrderController : public QObject {
     Q_OBJECT
@@ -95,8 +96,8 @@ public:
     QVariantList strategyList() const { return _strategyList; }
 
 public slots:
-    void onTick(const QString& json);
-    void updateInstrument(const QString& json);
+    void onTick(const QJsonObject& json);
+    void updateInstrument(const QJsonObject& json);
     Q_INVOKABLE void sendOrder(const QString& direction, const QString& offset, const QString& priceType = "LIMIT");
     void cancelOrder(const QString& instrumentId, const QString& orderSysId, const QString& orderRef, const QString& exchangeId, int frontId, int sessionId); // Added
     void subscribe(const QString& instrumentId);
@@ -107,7 +108,7 @@ public slots:
 
     // 由 ZmqWorker 调用
     void updateConnectionStatus(bool core, bool ctp);
-    void onPositionReceived(const QString& json);
+    void onPositionReceived(const QJsonObject& json);
 
     // QML 调用此方法发送指令 (中转到 Worker)
     Q_INVOKABLE void sendCommand(const QString& cmd);
@@ -117,7 +118,7 @@ public slots:
     
     // Condition Order Management
     Q_INVOKABLE void cancelConditionOrder(const QString& requestId);
-    void onConditionOrderReturn(const QString& json);
+    void onConditionOrderReturn(const QJsonObject& json);
     void queryConditionOrders(); // Called on startup/reconnect
     void queryStrategies(); // Query available strategies
     void modifyConditionOrder(const QString& requestId, double triggerPrice, double limitPrice, int volume); // 修改条件单
@@ -177,4 +178,4 @@ private:
     QVariantList _strategyList;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

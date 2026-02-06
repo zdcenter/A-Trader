@@ -860,20 +860,24 @@ Rectangle {
                                 
                                 onClicked: {
                                     limitPriceInput.text = Qt.binding(function() { 
-                                        if (!root.orderController) return ""
+                                        if (!root.marketModel) return ""
                                         
-                                        // 动态绑定：买入用卖一，卖出用买一
+                                        var instrument = instrumentCombo.currentText
+                                        if (!instrument) return ""
+
+                                        var data = root.marketModel.getMarketData(instrument)
+                                        // getMarketData returns QVariantMap: { "askPrice1": double, "bidPrice1": double ... }
+                                        // If data is empty/not found, values might be undefined or 0.
+
                                         var isBuy = buyRadio.checked
                                         var price = 0.0
                                         
                                         if (isBuy) {
-                                            if (root.orderController.askPrices && root.orderController.askPrices.length > 0) {
-                                                price = root.orderController.askPrices[0]
-                                            }
+                                            if (data.askPrice1 > 0.0001) price = data.askPrice1
+                                            else if (data.upperLimit > 0.0001) price = data.upperLimit // 涨停价兜底? 不，对手价通常是卖一
                                         } else {
-                                            if (root.orderController.bidPrices && root.orderController.bidPrices.length > 0) {
-                                                price = root.orderController.bidPrices[0]
-                                            }
+                                            if (data.bidPrice1 > 0.0001) price = data.bidPrice1
+                                            else if (data.lowerLimit > 0.0001) price = data.lowerLimit
                                         }
                                         return price > 0 ? price.toFixed(2) : ""
                                     })

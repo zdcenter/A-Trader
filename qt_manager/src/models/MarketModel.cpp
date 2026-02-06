@@ -1,9 +1,9 @@
 #include "models/MarketModel.h"
-#include <nlohmann/json.hpp>
+
 #include <QDebug>
 #include <cstring> // for strncpy, memset
 
-namespace atrad {
+namespace QuantLabs {
 
 MarketModel::MarketModel(QObject *parent)
     : QAbstractListModel(parent) {
@@ -67,12 +67,11 @@ QHash<int, QByteArray> MarketModel::roleNames() const {
     return roles;
 }
 
-void MarketModel::updateTick(const QString& json) {
+void MarketModel::updateTick(const QJsonObject& j) {
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
         QString id;
-        if(j.contains("instrument_id")) id = QString::fromStdString(j["instrument_id"]);
-        else if(j.contains("id")) id = QString::fromStdString(j["id"]);
+        if(j.contains("instrument_id")) id = j["instrument_id"].toString();
+        else if(j.contains("id")) id = j["id"].toString();
         
         if (id.isEmpty()) return;
 
@@ -85,9 +84,7 @@ void MarketModel::updateTick(const QString& json) {
              MarketItem newItem;
              std::memset(&newItem.data, 0, sizeof(TickData));
              newItem.instrumentId = id;
-             // also copy to data.instrument_id
              strncpy(newItem.data.instrument_id, id.toStdString().c_str(), sizeof(newItem.data.instrument_id)-1);
-             // initialized other UI fields
              newItem.preClose = 0.0; newItem.change = 0.0; newItem.changePercent = 0.0; newItem.updateTime = "--";
 
              _market_data.append(newItem);
@@ -95,41 +92,46 @@ void MarketModel::updateTick(const QString& json) {
              endInsertRows();
         }
         
-        // Ensure row is valid
         if(row < 0 || row >= _market_data.size()) return;
         
         auto& item = _market_data[row];
         auto& d = item.data;
 
-        // Parse JSON to TickData
-        if(j.contains("last_price")) d.last_price = j["last_price"]; else d.last_price = j.value("price", 0.0);
-        if(j.contains("volume")) d.volume = j["volume"];
-        if(j.contains("open_interest")) d.open_interest = j["open_interest"]; else d.open_interest = j.value("oi", 0.0);
+        if(j.contains("last_price")) d.last_price = j["last_price"].toDouble(); else if(j.contains("price")) d.last_price = j["price"].toDouble();
+        if(j.contains("volume")) d.volume = j["volume"].toInt();
+        if(j.contains("open_interest")) d.open_interest = j["open_interest"].toDouble(); else if(j.contains("oi")) d.open_interest = j["oi"].toDouble();
 
-        if(j.contains("bid_price1")) d.bid_price1 = j["bid_price1"]; else d.bid_price1 = j.value("b1", 0.0);
-        if(j.contains("bid_volume1")) d.bid_volume1 = j["bid_volume1"]; else d.bid_volume1 = j.value("bv1", 0);
-        if(j.contains("ask_price1")) d.ask_price1 = j["ask_price1"]; else d.ask_price1 = j.value("a1", 0.0);
-        if(j.contains("ask_volume1")) d.ask_volume1 = j["ask_volume1"]; else d.ask_volume1 = j.value("av1", 0);
+        if(j.contains("bid_price1")) d.bid_price1 = j["bid_price1"].toDouble(); else if(j.contains("b1")) d.bid_price1 = j["b1"].toDouble();
+        if(j.contains("bid_volume1")) d.bid_volume1 = j["bid_volume1"].toInt(); else if(j.contains("bv1")) d.bid_volume1 = j["bv1"].toInt();
+        if(j.contains("ask_price1")) d.ask_price1 = j["ask_price1"].toDouble(); else if(j.contains("a1")) d.ask_price1 = j["a1"].toDouble();
+        if(j.contains("ask_volume1")) d.ask_volume1 = j["ask_volume1"].toInt(); else if(j.contains("av1")) d.ask_volume1 = j["av1"].toInt();
 
         QString timeStr;
-        if(j.contains("update_time")) timeStr = QString::fromStdString(j["update_time"]); 
-        else timeStr = QString::fromStdString(j.value("time", ""));
+        if(j.contains("update_time")) timeStr = j["update_time"].toString();
+        else if(j.contains("time")) timeStr = j["time"].toString();
+        
         item.updateTime = timeStr;
         strncpy(d.update_time, timeStr.toStdString().c_str(), sizeof(d.update_time)-1);
         
-        if(j.contains("pre_settlement_price")) d.pre_settlement_price = j["pre_settlement_price"]; else d.pre_settlement_price = j.value("pre_settlement", 0.0);
-        if(j.contains("pre_close_price")) d.pre_close_price = j["pre_close_price"]; else d.pre_close_price = j.value("pre_close", 0.0);
+        if(j.contains("pre_settlement_price")) d.pre_settlement_price = j["pre_settlement_price"].toDouble(); else if(j.contains("pre_settlement")) d.pre_settlement_price = j["pre_settlement"].toDouble();
+        if(j.contains("pre_close_price")) d.pre_close_price = j["pre_close_price"].toDouble(); else if(j.contains("pre_close")) d.pre_close_price = j["pre_close"].toDouble();
         
-        if(j.contains("turnover")) d.turnover = j["turnover"];
-        double limitUp = 0.0; if(j.contains("upper_limit_price")) limitUp = j["upper_limit_price"]; else limitUp = j.value("limit_up", 0.0);
+        if(j.contains("turnover")) d.turnover = j["turnover"].toDouble();
+        
+        double limitUp = 0.0; 
+        if(j.contains("upper_limit_price")) limitUp = j["upper_limit_price"].toDouble(); 
+        else if(j.contains("limit_up")) limitUp = j["limit_up"].toDouble();
         d.upper_limit_price = limitUp;
-        double limitDown = 0.0; if(j.contains("lower_limit_price")) limitDown = j["lower_limit_price"]; else limitDown = j.value("limit_down", 0.0);
+        
+        double limitDown = 0.0; 
+        if(j.contains("lower_limit_price")) limitDown = j["lower_limit_price"].toDouble(); 
+        else if(j.contains("limit_down")) limitDown = j["limit_down"].toDouble();
         d.lower_limit_price = limitDown;
         
-        if(j.contains("open_price")) d.open_price = j["open_price"]; else d.open_price = j.value("open", 0.0);
-        if(j.contains("highest_price")) d.highest_price = j["highest_price"]; else d.highest_price = j.value("high", 0.0);
-        if(j.contains("lowest_price")) d.lowest_price = j["lowest_price"]; else d.lowest_price = j.value("low", 0.0);
-        if(j.contains("average_price")) d.average_price = j["average_price"]; else d.average_price = j.value("avg_price", 0.0);
+        if(j.contains("open_price")) d.open_price = j["open_price"].toDouble(); else if(j.contains("open")) d.open_price = j["open"].toDouble();
+        if(j.contains("highest_price")) d.highest_price = j["highest_price"].toDouble(); else if(j.contains("high")) d.highest_price = j["high"].toDouble();
+        if(j.contains("lowest_price")) d.lowest_price = j["lowest_price"].toDouble(); else if(j.contains("low")) d.lowest_price = j["low"].toDouble();
+        if(j.contains("average_price")) d.average_price = j["average_price"].toDouble(); else if(j.contains("avg_price")) d.average_price = j["avg_price"].toDouble();
 
         // Calculated fields for UI
         double basePrice = d.pre_settlement_price;
@@ -147,18 +149,14 @@ void MarketModel::updateTick(const QString& json) {
     }
 }
 
-void MarketModel::handleInstrument(const QString& json) {
-    qDebug() << "[MarketModel] handleInstrument called with:" << json;
+void MarketModel::handleInstrument(const QJsonObject& j) {
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
         QString id;
-        if(j.contains("instrument_id")) id = QString::fromStdString(j["instrument_id"]);
-        else if(j.contains("id")) id = QString::fromStdString(j["id"]);
+        if(j.contains("instrument_id")) id = j["instrument_id"].toString();
+        else if(j.contains("id")) id = j["id"].toString();
         
         if (id.isEmpty()) return;
         
-        qDebug() << "[MarketModel] Parsed instrument ID:" << id;
-
         if (!_instrument_to_index.contains(id)) {
             qDebug() << "[MarketModel] Adding new instrument:" << id;
             beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
@@ -174,8 +172,6 @@ void MarketModel::handleInstrument(const QString& json) {
             _market_data.append(item);
             endInsertRows();
             qDebug() << "[MarketModel] Instrument added successfully";
-        } else {
-            qDebug() << "[MarketModel] Instrument already exists:" << id;
         }
     } catch (const std::exception& e) {
         qDebug() << "[MarketModel] Exception in handleInstrument:" << e.what();
@@ -330,4 +326,22 @@ void MarketModel::setInstrumentOrder(const QStringList& ids) {
     qDebug() << "[MarketModel] Reorder completed. Total:" << _market_data.size();
 }
 
-} // namespace atrad
+QVariantMap MarketModel::getMarketData(const QString& instrumentId) const {
+    QVariantMap map;
+    if (instrumentId.isEmpty() || !_instrument_to_index.contains(instrumentId)) return map;
+    
+    int row = _instrument_to_index.value(instrumentId);
+    if (row < 0 || row >= _market_data.size()) return map;
+    
+    const auto& item = _market_data[row];
+    map["lastPrice"] = item.data.last_price;
+    map["askPrice1"] = item.data.ask_price1;
+    map["bidPrice1"] = item.data.bid_price1;
+    map["upperLimit"] = item.data.upper_limit_price;
+    map["lowerLimit"] = item.data.lower_limit_price;
+    map["volume"] = item.data.volume;
+    
+    return map;
+}
+
+} // namespace QuantLabs

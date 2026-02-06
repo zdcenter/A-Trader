@@ -146,14 +146,14 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
-      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2d.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimediad.lib;C:\vcpkg\installed\x64-windows\debug\lib\libzmq-mt-gd-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quickd.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGLd.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qmld.lib;shell32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Guid.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Networkd.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Cored.lib;mpr.lib;userenv.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2d.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimediad.lib;C:\vcpkg\installed\x64-windows\debug\lib\libzmq-mt-gd-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quickd.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGLd.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qmld.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Guid.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Networkd.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Cored.lib;mpr.lib;userenv.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6EntryPointd.lib;shell32.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImportLibrary>Z:/qt_manager/build-windows/Debug/qt_manager.lib</ImportLibrary>
       <ProgramDataBaseFile>Z:/qt_manager/build-windows/Debug/qt_manager.pdb</ProgramDataBaseFile>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -220,14 +220,14 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
-      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimedia.lib;C:\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quick.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGL.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qml.lib;shell32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Gui.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Network.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Core.lib;mpr.lib;userenv.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimedia.lib;C:\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quick.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGL.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qml.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Gui.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Network.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Core.lib;mpr.lib;userenv.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6EntryPoint.lib;shell32.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImportLibrary>Z:/qt_manager/build-windows/Release/qt_manager.lib</ImportLibrary>
       <ProgramDataBaseFile>Z:/qt_manager/build-windows/Release/qt_manager.pdb</ProgramDataBaseFile>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -294,14 +294,14 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
-      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimedia.lib;C:\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quick.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGL.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qml.lib;shell32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Gui.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Network.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Core.lib;mpr.lib;userenv.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimedia.lib;C:\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quick.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGL.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qml.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Gui.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Network.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Core.lib;mpr.lib;userenv.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6EntryPoint.lib;shell32.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImportLibrary>Z:/qt_manager/build-windows/MinSizeRel/qt_manager.lib</ImportLibrary>
       <ProgramDataBaseFile>Z:/qt_manager/build-windows/MinSizeRel/qt_manager.pdb</ProgramDataBaseFile>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -367,14 +367,14 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
-      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimedia.lib;C:\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quick.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGL.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qml.lib;shell32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Gui.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Network.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Core.lib;mpr.lib;userenv.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>D:\Qt\6.10.2\msvc2022_64\lib\Qt6QuickControls2.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Multimedia.lib;C:\vcpkg\installed\x64-windows\lib\libzmq-mt-4_3_5.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Quick.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6OpenGL.lib;user32.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Qml.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Gui.lib;d3d11.lib;dxgi.lib;dxguid.lib;d3d12.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Network.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6Core.lib;mpr.lib;userenv.lib;D:\Qt\6.10.2\msvc2022_64\lib\Qt6EntryPoint.lib;shell32.lib;ws2_32.lib;rpcrt4.lib;iphlpapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImportLibrary>Z:/qt_manager/build-windows/RelWithDebInfo/qt_manager.lib</ImportLibrary>
       <ProgramDataBaseFile>Z:/qt_manager/build-windows/RelWithDebInfo/qt_manager.pdb</ProgramDataBaseFile>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
     </Link>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -448,7 +448,7 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 exit /b %1
 :cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Z:\qt_manager\resources\sounds\condition_triggered.wav;Z:\qt_manager\resources\sounds\condition_cancelled.wav;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Z:\qt_manager\resources\sounds\success1.wav;Z:\qt_manager\resources\sounds\success2.wav;Z:\qt_manager\resources\sounds\fail1.wav;Z:\qt_manager\resources\sounds\trade1.wav;Z:\qt_manager\resources\app_icon.png;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Z:\qt_manager\build-windows\qrc_resources.cpp</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating qrc_resources.cpp</Message>
@@ -461,7 +461,7 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 exit /b %1
 :cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Z:\qt_manager\resources\sounds\condition_triggered.wav;Z:\qt_manager\resources\sounds\condition_cancelled.wav;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Z:\qt_manager\resources\sounds\success1.wav;Z:\qt_manager\resources\sounds\success2.wav;Z:\qt_manager\resources\sounds\fail1.wav;Z:\qt_manager\resources\sounds\trade1.wav;Z:\qt_manager\resources\app_icon.png;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Z:\qt_manager\build-windows\qrc_resources.cpp</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
       <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating qrc_resources.cpp</Message>
@@ -474,7 +474,7 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 exit /b %1
 :cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Z:\qt_manager\resources\sounds\condition_triggered.wav;Z:\qt_manager\resources\sounds\condition_cancelled.wav;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Z:\qt_manager\resources\sounds\success1.wav;Z:\qt_manager\resources\sounds\success2.wav;Z:\qt_manager\resources\sounds\fail1.wav;Z:\qt_manager\resources\sounds\trade1.wav;Z:\qt_manager\resources\app_icon.png;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Z:\qt_manager\build-windows\qrc_resources.cpp</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
       <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating qrc_resources.cpp</Message>
@@ -487,7 +487,7 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 exit /b %1
 :cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
-      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Z:\qt_manager\resources\sounds\condition_triggered.wav;Z:\qt_manager\resources\sounds\condition_cancelled.wav;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Z:\qt_manager\resources\sounds\success1.wav;Z:\qt_manager\resources\sounds\success2.wav;Z:\qt_manager\resources\sounds\fail1.wav;Z:\qt_manager\resources\sounds\trade1.wav;Z:\qt_manager\resources\app_icon.png;Z:\qt_manager\build-windows\resources\resources.qrc.depends;D:\Qt\6.10.2\msvc2022_64\bin\rcc.exe;%(AdditionalInputs)</AdditionalInputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Z:\qt_manager\build-windows\qrc_resources.cpp</Outputs>
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
     </CustomBuild>
@@ -569,6 +569,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="Z:\qt_manager\build-windows\qrc_resources.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ResourceCompile Include="Z:\qt_manager\resources\app_icon.rc" />
     <Natvis Include="C:\vcpkg\installed\x64-windows\share\nlohmann_json\nlohmann_json.natvis">
     </Natvis>
     <ClCompile Include="Z:\qt_manager\build-windows\qt_manager_autogen\mocs_compilation_Release.cpp">

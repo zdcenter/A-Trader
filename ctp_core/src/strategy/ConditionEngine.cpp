@@ -4,7 +4,7 @@
 #include <cstring>
 #include <algorithm>
 
-namespace atrad {
+namespace QuantLabs {
 
 ConditionEngine::ConditionEngine(TraderHandler& trader) 
     : trader_(trader) {
@@ -213,7 +213,7 @@ void ConditionEngine::executeOrder(ConditionOrderRequest& order, const CThostFtd
               << " Tick:" << price_tick << std::endl;
 
     // 4. Send Order (带 strategy_id)
-    trader_.insertOrder(order.instrument_id, base_price, order.volume, order.direction, order.offset_flag, order.strategy_id);
+    trader_.insertOrder(order.instrument_id, base_price, order.volume, order.direction, order.offset_flag, '2', order.strategy_id);
 }
 
-} // namespace atrad
+} // namespace QuantLabs

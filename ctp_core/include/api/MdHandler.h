@@ -8,7 +8,7 @@
 #include <set>
 #include <vector>
 
-namespace atrad {
+namespace QuantLabs {
 
 class MdHandler : public CThostFtdcMdSpi {
 public:
@@ -47,4 +47,4 @@ private:
 
 };
 
-} // namespace atrad
+} // namespace QuantLabs

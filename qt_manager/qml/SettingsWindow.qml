@@ -39,6 +39,10 @@ Window {
         property int repPort: 5556
     }
     
+    // 声音设置（从外部传入）
+    property var soundSettings
+
+    
     // 主题列表（与 main.qml 保持一致）
     readonly property var themeNames: [
         "深色经典",
@@ -120,7 +124,8 @@ Window {
                             model: [
                                 {icon: "🎨", text: "界面设置"},
                                 {icon: "📊", text: "交易设置"},
-                                {icon: "🌐", text: "连接设置"}
+                                {icon: "🌐", text: "连接设置"},
+                                {icon: "🔊", text: "声音设置"}
                             ]
 
                             Rectangle {
@@ -589,6 +594,132 @@ Window {
                                             font.pixelSize: 13
                                             color: "#ffaa00"
                                             wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+
+
+                        
+                                Item { Layout.fillHeight: true }
+                            }
+                        }
+                        
+                        // ========== 声音设置 ==========
+                        ScrollView {
+                            clip: true
+
+                            ColumnLayout {
+                                width: tabView.width - 64
+                                spacing: 24
+
+                                // 声音开关
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Text {
+                                        text: "声音反馈"
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
+                                        color: "#ffffff"
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 100
+                                        color: "#2b2b2b"
+                                        radius: 6
+                                        border.width: 1
+                                        border.color: "#3c3c3c"
+
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 16
+                                            spacing: 16
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                
+                                                Text {
+                                                    text: "下单反馈音（成功/失败/撤单）"
+                                                    font.pixelSize: 14
+                                                    color: "#ffffff"
+                                                    Layout.fillWidth: true
+                                                }
+                                                
+                                                Switch {
+                                                    checked: soundSettings.enableOrderSound
+                                                    onCheckedChanged: soundSettings.enableOrderSound = checked
+                                                }
+                                            }
+                                            
+                                            Rectangle { height: 1; Layout.fillWidth: true; color: "#3c3c3c" }
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                
+                                                Text {
+                                                    text: "成交反馈音"
+                                                    font.pixelSize: 14
+                                                    color: "#ffffff"
+                                                    Layout.fillWidth: true
+                                                }
+                                                
+                                                Switch {
+                                                    checked: soundSettings.enableTradeSound
+                                                    onCheckedChanged: soundSettings.enableTradeSound = checked
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // 音量设置
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Text {
+                                        text: "音量设置"
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
+                                        color: "#ffffff"
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 60
+                                        color: "#2b2b2b"
+                                        radius: 6
+                                        border.width: 1
+                                        border.color: "#3c3c3c"
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 16
+                                            spacing: 16
+                                            
+                                            Text {
+                                                text: "🔈" 
+                                                font.pixelSize: 16 
+                                            }
+
+                                            Slider {
+                                                Layout.fillWidth: true
+                                                from: 0
+                                                to: 100
+                                                value: soundSettings.volume
+                                                stepSize: 1
+                                                onMoved: soundSettings.volume = value
+                                            }
+                                            
+                                            Text {
+                                                text: soundSettings.volume + "%"
+                                                font.pixelSize: 14
+                                                color: "#ffffff"
+                                                Layout.preferredWidth: 40
+                                                horizontalAlignment: Text.AlignRight
+                                            }
                                         }
                                     }
                                 }

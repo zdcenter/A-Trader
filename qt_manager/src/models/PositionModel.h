@@ -4,15 +4,21 @@
 #include <QHash>
 #include <QVector>
 #include <QString>
+#include <QJsonObject>
 #include "../../../shared/protocol/message_schema.h"
 
-namespace atrad {
+namespace QuantLabs {
 
 struct PositionItem {
     PositionData data;
     // Helper fields for UI
     QString instrumentId; 
-    double lastPrice; 
+    double lastPrice;
+    double bidPrice1;  // 买一价
+    double askPrice1;  // 卖一价
+    double priceTick;  // 最小变动价位
+    double upperLimit; // 涨停板
+    double lowerLimit; // 跌停板
     double profit;
 };
 
@@ -29,6 +35,11 @@ public:
         CostRole,
         ProfitRole,
         LastPriceRole,
+        BidPrice1Role,
+        AskPrice1Role,
+        PriceTickRole,
+        UpperLimitRole,
+        LowerLimitRole,
         AvgPriceRole,
         ExchangeRole
     };
@@ -42,9 +53,9 @@ public:
     double totalProfit() const { return _total_profit; }
 
 public slots:
-    void updatePosition(const QString& json);
-    void updatePrice(const QString& json); 
-    void updateInstrument(const QString& json); 
+    void updatePosition(const QJsonObject& json);
+    void updatePrice(const QJsonObject& json); 
+    void updateInstrument(const QJsonObject& json); 
 
 signals:
     void totalProfitChanged(double totalProfit);
@@ -61,4 +72,4 @@ private:
 };
 
 
-} // namespace atrad
+} // namespace QuantLabs

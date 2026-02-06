@@ -3,8 +3,9 @@
 #include <QAbstractListModel>
 #include <vector>
 #include <mutex>
+#include <QJsonObject>
 
-namespace atrad {
+namespace QuantLabs {
 
 struct OrderItem {
     QString instrument_id;
@@ -51,9 +52,12 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
+    
+signals:
+    void orderSoundTriggered(const QString& type); // "success", "fail", "cancel"
 
 public slots:
-    void onOrderReceived(const QString& json);
+    void onOrderReceived(const QJsonObject& json);
 
 private:
     std::vector<OrderItem> _orders;
@@ -61,7 +65,7 @@ private:
     
     // 简单的 key-index 映射，用于快速更新 (Key: OrderSysID or OrderRef if sysid empty)
     // 简化起见，我们遍历查找或者用 OrderSysID
-    int findOrderIndex(const QString& sysId, const QString& ref);
+    int findOrderIndex(const QString& sysId, const QString& ref, const QString& instrumentId);
 };
 
-} // namespace atrad
+} // namespace QuantLabs

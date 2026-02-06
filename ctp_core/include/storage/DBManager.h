@@ -19,7 +19,7 @@
 // So we include it. If user builds fail, they know why.
 #include <pqxx/pqxx>
 
-namespace atrad {
+namespace QuantLabs {
 
 enum class DBTaskType {
     INSTRUMENT,
@@ -101,4 +101,4 @@ private:
     std::atomic<bool> connected_{false};
 };
 
-} // namespace atrad
+} // namespace QuantLabs

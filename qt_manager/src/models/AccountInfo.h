@@ -2,7 +2,8 @@
 
 #include <QObject>
 #include <QString>
-#include <nlohmann/json.hpp>
+#include <QJsonObject>
+
 
 #include "../../../shared/protocol/message_schema.h" // Relative path adjustment might be needed depending on include paths
 // actually cmake usually sets include path. Let's try fully qualified or assuming include directories.
@@ -13,7 +14,7 @@
 // shared is /home/zd/A-Trader/shared
 // So ../../../shared/protocol/message_schema.h works.
 
-namespace atrad {
+namespace QuantLabs {
 
 class AccountInfo : public QObject {
     Q_OBJECT
@@ -41,27 +42,25 @@ public:
     double equity() const { return _data.balance + _floating_profit; }
 
 public slots:
-    void updateAccount(const QString& json) {
+    void updateAccount(const QJsonObject& j) {
         try {
-            auto j = nlohmann::json::parse(json.toStdString());
-            
             // Core now sends spec-compliant snake_case
-            if (j.contains("balance")) _data.balance = j["balance"]; 
-            else _data.balance = j.value("bal", 0.0);
+            if (j.contains("balance")) _data.balance = j["balance"].toDouble(); 
+            else _data.balance = j["bal"].toDouble();
             
-            if (j.contains("available")) _data.available = j["available"]; 
-            else _data.available = j.value("avail", 0.0);
+            if (j.contains("available")) _data.available = j["available"].toDouble(); 
+            else _data.available = j["avail"].toDouble();
             
-            _data.margin = j.value("margin", 0.0);
+            _data.margin = j["margin"].toDouble();
             
-            if (j.contains("frozen_margin")) _data.frozen_margin = j["frozen_margin"]; 
-            else _data.frozen_margin = j.value("frozen", 0.0);
+            if (j.contains("frozen_margin")) _data.frozen_margin = j["frozen_margin"].toDouble(); 
+            else _data.frozen_margin = j["frozen"].toDouble();
             
-            if (j.contains("commission")) _data.commission = j["commission"]; 
-            else _data.commission = j.value("comm", 0.0);
+            if (j.contains("commission")) _data.commission = j["commission"].toDouble(); 
+            else _data.commission = j["comm"].toDouble();
 
-            if (j.contains("close_profit")) _data.close_profit = j["close_profit"];
-            else _data.close_profit = j.value("close_profit", 0.0);
+            if (j.contains("close_profit")) _data.close_profit = j["close_profit"].toDouble();
+            else _data.close_profit = j["close_profit"].toDouble();
             
             emit changed();
         } catch (...) {}
@@ -82,4 +81,4 @@ private:
     double _floating_profit = 0.0;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

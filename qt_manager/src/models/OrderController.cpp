@@ -1,28 +1,28 @@
 #include "models/OrderController.h"
 #include <QDebug>
 #include <cstring>
+#include <QJsonArray>
+#include <QJsonDocument>
 
-namespace atrad {
+namespace QuantLabs {
 
 OrderController::OrderController(QObject *parent) : QObject(parent) {
     connect(this, &OrderController::orderParamsChanged, this, &OrderController::recalculate);
 }
 
 // 新增 onTick 实现
-void OrderController::onTick(const QString& json) {
+void OrderController::onTick(const QJsonObject& j) {
     if (_instrumentId.isEmpty() || _isManualPrice) return;
     
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
-        
         std::string id;
-        if (j.contains("instrument_id")) id = j["instrument_id"];
-        else if (j.contains("id")) id = j["id"];
+        if (j.contains("instrument_id")) id = j["instrument_id"].toString().toStdString();
+        else if (j.contains("id")) id = j["id"].toString().toStdString();
         
         if (id == _instrumentId.toStdString()) {
             double lastPrice = 0.0;
-            if (j.contains("last_price")) lastPrice = j["last_price"];
-            else if (j.contains("price")) lastPrice = j["price"]; // compat
+            if (j.contains("last_price")) lastPrice = j["last_price"].toDouble();
+            else if (j.contains("price")) lastPrice = j["price"].toDouble(); // compat
             
             if (lastPrice > 0.0001 && std::abs(_price - lastPrice) > 0.0001) {
                 _price = lastPrice;
@@ -35,34 +35,34 @@ void OrderController::onTick(const QString& json) {
             
             // Bid 1-5
             for(int i=1; i<=5; ++i) {
-               std::string pKey = "bid_price" + std::to_string(i);
-               std::string vKey = "bid_volume" + std::to_string(i);
+               QString pKey = "bid_price" + QString::number(i);
+               QString vKey = "bid_volume" + QString::number(i);
                // compat
-               std::string oldP = "b" + std::to_string(i);
-               std::string oldV = "bv" + std::to_string(i);
+               QString oldP = "b" + QString::number(i);
+               QString oldV = "bv" + QString::number(i);
 
-               if (j.contains(pKey)) _bidPrices.append(j[pKey].get<double>());
-               else if (j.contains(oldP)) _bidPrices.append(j[oldP].get<double>());
+               if (j.contains(pKey)) _bidPrices.append(j[pKey].toDouble());
+               else if (j.contains(oldP)) _bidPrices.append(j[oldP].toDouble());
                else _bidPrices.append(0.0);
 
-               if (j.contains(vKey)) _bidVolumes.append(j[vKey].get<int>());
-               else if (j.contains(oldV)) _bidVolumes.append(j[oldV].get<int>());
+               if (j.contains(vKey)) _bidVolumes.append(j[vKey].toInt());
+               else if (j.contains(oldV)) _bidVolumes.append(j[oldV].toInt());
                else _bidVolumes.append(0);
             }
 
             // Ask 1-5
             for(int i=1; i<=5; ++i) {
-               std::string pKey = "ask_price" + std::to_string(i);
-               std::string vKey = "ask_volume" + std::to_string(i);
-               std::string oldP = "a" + std::to_string(i);
-               std::string oldV = "av" + std::to_string(i);
+               QString pKey = "ask_price" + QString::number(i);
+               QString vKey = "ask_volume" + QString::number(i);
+               QString oldP = "a" + QString::number(i);
+               QString oldV = "av" + QString::number(i);
 
-               if (j.contains(pKey)) _askPrices.append(j[pKey].get<double>());
-               else if (j.contains(oldP)) _askPrices.append(j[oldP].get<double>());
+               if (j.contains(pKey)) _askPrices.append(j[pKey].toDouble());
+               else if (j.contains(oldP)) _askPrices.append(j[oldP].toDouble());
                else _askPrices.append(0.0);
 
-               if (j.contains(vKey)) _askVolumes.append(j[vKey].get<int>());
-               else if (j.contains(oldV)) _askVolumes.append(j[oldV].get<int>());
+               if (j.contains(vKey)) _askVolumes.append(j[vKey].toInt());
+               else if (j.contains(oldV)) _askVolumes.append(j[oldV].toInt());
                else _askVolumes.append(0);
             }
             
@@ -71,17 +71,15 @@ void OrderController::onTick(const QString& json) {
     } catch (...) {}
 }
 
-void OrderController::updateInstrument(const QString& json) {
+void OrderController::updateInstrument(const QJsonObject& j) {
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
-        
         QString idStr;
-        if (j.contains("instrument_id")) idStr = QString::fromStdString(j["instrument_id"]);
-        else if (j.contains("id")) idStr = QString::fromStdString(j["id"]); 
+        if (j.contains("instrument_id")) idStr = j["instrument_id"].toString();
+        else if (j.contains("id")) idStr = j["id"].toString(); 
         
         if (idStr.isEmpty()) return;
         
-        // 增量更新逻辑：先获取现有数据，防止部分字段（如 PriceTick）在仅推送费率时被覆盖清零
+        // 增量更新逻辑：先获取现有数据
         InstrumentData info;
         if (_instrument_dict.contains(idStr)) {
             info = _instrument_dict[idStr];
@@ -89,66 +87,44 @@ void OrderController::updateInstrument(const QString& json) {
             std::memset(&info, 0, sizeof(info)); 
         }
 
-        // 解析并覆盖字段 (使用 value 提供默认值，但仅在包含该key时才覆盖可能更好，或者全部覆盖)
-        // 这里假设后端推的是全量或者包含关键key。
-        // 然而 Publisher::publishInstrument 总是推送全量字段，除了费率更新时可能...
-        // 实际上 TraderHandler::publishInstrument 也是构建了包含所有字段的 JSON。
-        // 但为了安全起见（防止后端改为部分推送），我们做增量更新是更稳健的。
-
         if (j.contains("instrument_id")) {
-             std::string s = j["instrument_id"];
+             std::string s = j["instrument_id"].toString().toStdString();
              strncpy(info.instrument_id, s.c_str(), sizeof(info.instrument_id) - 1);
         }
         if (j.contains("instrument_name")) {
-             std::string s = j["instrument_name"];
+             std::string s = j["instrument_name"].toString().toStdString();
              strncpy(info.instrument_name, s.c_str(), sizeof(info.instrument_name) - 1);
         }
         if (j.contains("exchange_id")) {
-             std::string s = j["exchange_id"];
+             std::string s = j["exchange_id"].toString().toStdString();
              strncpy(info.exchange_id, s.c_str(), sizeof(info.exchange_id) - 1);
         }
-        if (j.contains("product_id")) { // 也就是 product_id
-             std::string s = j.value("product_id", ""); // Use value for safety if key missing but expected
-             // 注意：如果 JSON 里没这个key，value() 返回空串，strncpy 会把 info.product_id 清空。
-             // 所以必须检查 key 是否存在再覆盖。
-        }
-        // 修正：上述逻辑太繁琐，Publisher.cpp 显示它总是构造完整的 JSON。
-        // 唯一的例外可能是：instrument_cache_ 在 TraderHandler 里也是分步构建的！
-        // 当 TraderHandler 收到 Instrument 时，费率为 0；收到 Margin 时，费率更新但 handler 保存了完整对象。
-        // 因此 Publisher 发出来的 JSON 应该是完整的（基于 handler 的 cache）。
-        
-        // *但是*，如果 JSON 中某个字段是 0（通过 .value 默认值），我们不希望覆盖已有的非 0 值？
-        // 不，应该信任后端传来的值。
-        // 真正的问题是：如果 startUp 时先收到了 Margin Update（极低概率，通常先 Query Instrument），
-        // 或者 Publisher 虽然构建了完整 JSON，但某些字段在 Handler 里尚未初始化（例如 PriceTick 还没查到就被 Margin 触发推送了？）
-        
-        // 我们还是按照“收到什么更新什么”的原则来写最稳妥
         
         if (j.contains("product_id")) {
-            std::string s = j["product_id"];
+            std::string s = j["product_id"].toString().toStdString();
             strncpy(info.product_id, s.c_str(), sizeof(info.product_id) - 1);
         }
 
         // 关键字段 PriceTick
         if (j.contains("price_tick")) {
-            double v = j["price_tick"].get<double>();
-            if (v > 1e-9) info.price_tick = v; // 仅当有效时更新，防止被 0 覆盖
+            double v = j["price_tick"].toDouble();
+            if (v > 1e-9) info.price_tick = v; // 仅当有效时更新
         }
         
-        if (j.contains("volume_multiple")) info.volume_multiple = j["volume_multiple"].get<int>();
+        if (j.contains("volume_multiple")) info.volume_multiple = j["volume_multiple"].toInt();
 
         // 费率
-        if (j.contains("long_margin_ratio_by_money")) info.long_margin_ratio_by_money = j["long_margin_ratio_by_money"].get<double>();
-        if (j.contains("long_margin_ratio_by_volume")) info.long_margin_ratio_by_volume = j["long_margin_ratio_by_volume"].get<double>();
-        if (j.contains("short_margin_ratio_by_money")) info.short_margin_ratio_by_money = j["short_margin_ratio_by_money"].get<double>();
-        if (j.contains("short_margin_ratio_by_volume")) info.short_margin_ratio_by_volume = j["short_margin_ratio_by_volume"].get<double>();
+        if (j.contains("long_margin_ratio_by_money")) info.long_margin_ratio_by_money = j["long_margin_ratio_by_money"].toDouble();
+        if (j.contains("long_margin_ratio_by_volume")) info.long_margin_ratio_by_volume = j["long_margin_ratio_by_volume"].toDouble();
+        if (j.contains("short_margin_ratio_by_money")) info.short_margin_ratio_by_money = j["short_margin_ratio_by_money"].toDouble();
+        if (j.contains("short_margin_ratio_by_volume")) info.short_margin_ratio_by_volume = j["short_margin_ratio_by_volume"].toDouble();
         
-        if (j.contains("open_ratio_by_money")) info.open_ratio_by_money = j["open_ratio_by_money"].get<double>();
-        if (j.contains("open_ratio_by_volume")) info.open_ratio_by_volume = j["open_ratio_by_volume"].get<double>();
-        if (j.contains("close_ratio_by_money")) info.close_ratio_by_money = j["close_ratio_by_money"].get<double>();
-        if (j.contains("close_ratio_by_volume")) info.close_ratio_by_volume = j["close_ratio_by_volume"].get<double>();
-        if (j.contains("close_today_ratio_by_money")) info.close_today_ratio_by_money = j["close_today_ratio_by_money"].get<double>();
-        if (j.contains("close_today_ratio_by_volume")) info.close_today_ratio_by_volume = j["close_today_ratio_by_volume"].get<double>();
+        if (j.contains("open_ratio_by_money")) info.open_ratio_by_money = j["open_ratio_by_money"].toDouble();
+        if (j.contains("open_ratio_by_volume")) info.open_ratio_by_volume = j["open_ratio_by_volume"].toDouble();
+        if (j.contains("close_ratio_by_money")) info.close_ratio_by_money = j["close_ratio_by_money"].toDouble();
+        if (j.contains("close_ratio_by_volume")) info.close_ratio_by_volume = j["close_ratio_by_volume"].toDouble();
+        if (j.contains("close_today_ratio_by_money")) info.close_today_ratio_by_money = j["close_today_ratio_by_money"].toDouble();
+        if (j.contains("close_today_ratio_by_volume")) info.close_today_ratio_by_volume = j["close_today_ratio_by_volume"].toDouble();
 
         qDebug() << "[OrderController] Instrument Updated:" << idStr 
                  << "Tick:" << info.price_tick 
@@ -158,14 +134,14 @@ void OrderController::updateInstrument(const QString& json) {
         
         if (idStr == _instrumentId) {
             recalculate();
-            emit orderParamsChanged(); // Ensure tick update notifies UI
+            emit orderParamsChanged();
         } else if (!_instrumentId.isEmpty() && _instrument_dict.contains(_instrumentId)) {
             if (idStr == QString::fromUtf8(_instrument_dict[_instrumentId].product_id)) {
                 recalculate();
             }
         }
     } catch (const std::exception& e) {
-        qDebug() << "[OrderController] JSON Parse Error:" << e.what();
+        qDebug() << "[OrderController] Error:" << e.what();
     }
 }
 
@@ -219,7 +195,7 @@ void OrderController::sendOrder(const QString& direction, const QString& offset,
     if (_instrumentId.isEmpty() || _volume <= 0) return;
 
     nlohmann::json j;
-    j["type"] = atrad::CmdType::Order;
+    j["type"] = QuantLabs::CmdType::Order;
     j["id"] = _instrumentId.toStdString();
     
     // Map Direction
@@ -237,7 +213,19 @@ void OrderController::sendOrder(const QString& direction, const QString& offset,
     // Map Price Type & Price
     if (priceType == "MARKET") {
         j["price_type"] = "1"; // CTP AnyPrice
-        j["price"] = 0.0;
+        
+        // Pass the manually set price (calculated in QML) for simulation
+        // If _price is 0, try to fallback to opponent price
+        double finalPrice = _price;
+        if (finalPrice < 0.0001) {
+             bool isBuy = (direction == "BUY" || direction == "0" || direction == "2");
+             if (isBuy && !_askPrices.isEmpty() && _askPrices[0].toDouble() > 0.0001) {
+                 finalPrice = _askPrices[0].toDouble();
+             } else if (!isBuy && !_bidPrices.isEmpty() && _bidPrices[0].toDouble() > 0.0001) {
+                 finalPrice = _bidPrices[0].toDouble();
+             }
+        }
+        j["price"] = finalPrice;
     } else if (priceType == "OPPONENT") {
         j["price_type"] = "2"; // CTP LimitPrice
         
@@ -269,7 +257,7 @@ void OrderController::sendOrder(const QString& direction, const QString& offset,
 
 void OrderController::cancelOrder(const QString& instrumentId, const QString& orderSysId, const QString& orderRef, const QString& exchangeId, int frontId, int sessionId) {
     nlohmann::json j;
-    j["type"] = atrad::CmdType::OrderAction; // Use OrderAction type (usually 'action')
+    j["type"] = QuantLabs::CmdType::OrderAction; // Use OrderAction type (usually 'action')
     j["id"] = instrumentId.toStdString();
     
     nlohmann::json data;
@@ -295,7 +283,7 @@ void OrderController::subscribe(const QString& id) {
     if (id.isEmpty()) return;
     qDebug() << "[OrderController] subscribe called with:" << id;
     nlohmann::json j;
-    j["type"] = atrad::CmdType::Subscribe;
+    j["type"] = QuantLabs::CmdType::Subscribe;
     j["id"] = id.toStdString();
     QString jsonStr = QString::fromStdString(j.dump());
     qDebug() << "[OrderController] Emitting orderSent:" << jsonStr;
@@ -305,35 +293,36 @@ void OrderController::subscribe(const QString& id) {
 void OrderController::unsubscribe(const QString& id) {
     if (id.isEmpty()) return;
     nlohmann::json j;
-    j["type"] = atrad::CmdType::Unsubscribe;
+    j["type"] = QuantLabs::CmdType::Unsubscribe;
     j["id"] = id.toStdString();
     emit orderSent(QString::fromStdString(j.dump()));
 }
 
 
 
-void OrderController::onPositionReceived(const QString& json) {
+
+void OrderController::onPositionReceived(const QJsonObject& j) {
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
         QString id;
-        if (j.contains("instrument_id")) id = QString::fromStdString(j["instrument_id"]);
+        if (j.contains("instrument_id")) id = j["instrument_id"].toString();
         
         if (id.isEmpty()) return;
 
         char dir = 0;
         if(j.contains("direction")) {
-            if (j["direction"].is_string()) dir = j["direction"].get<std::string>()[0]; 
-            else dir = (char)j["direction"].get<int>();
+            QJsonValue v = j["direction"];
+            if (v.isString()) dir = v.toString().toStdString()[0];
+            else dir = (char)v.toInt();
         }
 
         int pos = 0;
-        if(j.contains("position")) pos = j["position"];
+        if(j.contains("position")) pos = j["position"].toInt();
 
         int td = 0;
-        if(j.contains("today_position")) td = j["today_position"];
+        if(j.contains("today_position")) td = j["today_position"].toInt();
 
         int yd = 0;
-        if(j.contains("yd_position")) yd = j["yd_position"];
+        if(j.contains("yd_position")) yd = j["yd_position"].toInt();
 
         // Update cache
         if (!_pos_cache.contains(id)) {
@@ -371,7 +360,7 @@ void OrderController::updateCurrentPos(const QString& id) {
 
 void OrderController::cancelConditionOrder(const QString& requestId) {
     nlohmann::json req;
-    req["type"] = atrad::CmdType::ConditionOrderCancel;
+    req["type"] = QuantLabs::CmdType::ConditionOrderCancel;
     
     nlohmann::json data;
     data["request_id"] = requestId.toULongLong();
@@ -382,19 +371,19 @@ void OrderController::cancelConditionOrder(const QString& requestId) {
 
 void OrderController::queryConditionOrders() {
     nlohmann::json req;
-    req["type"] = atrad::CmdType::ConditionOrderQuery;
+    req["type"] = QuantLabs::CmdType::ConditionOrderQuery;
     emit orderSent(QString::fromStdString(req.dump()));
 }
 
 void OrderController::queryStrategies() {
     nlohmann::json req;
-    req["type"] = atrad::CmdType::StrategyQuery;
+    req["type"] = QuantLabs::CmdType::StrategyQuery;
     emit orderSent(QString::fromStdString(req.dump()));
 }
 
 void OrderController::modifyConditionOrder(const QString& requestId, double triggerPrice, double limitPrice, int volume) {
     nlohmann::json req;
-    req["type"] = atrad::CmdType::ConditionOrderModify;
+    req["type"] = QuantLabs::CmdType::ConditionOrderModify;
     req["data"]["request_id"] = requestId.toULongLong();
     req["data"]["trigger_price"] = triggerPrice;
     req["data"]["limit_price"] = limitPrice;
@@ -406,29 +395,27 @@ void OrderController::modifyConditionOrder(const QString& requestId, double trig
     emit orderSent(QString::fromStdString(req.dump()));
 }
 
-void OrderController::onConditionOrderReturn(const QString& json) {
+void OrderController::onConditionOrderReturn(const QJsonObject& j) {
     try {
-        auto j = nlohmann::json::parse(json.toStdString());
-        
         std::string type;
-        if (j.contains("type")) type = j["type"];
+        if (j.contains("type")) type = j["type"].toString().toStdString();
 
         // Handle Strategy List Response
-        if (type == atrad::CmdType::RtnStrategyList) {
-            if (j.contains("data") && j["data"].is_array()) {
+        if (type == QuantLabs::CmdType::RtnStrategyList) {
+            if (j.contains("data") && j["data"].isArray()) {
                 _strategyList.clear();
                 
-                // Optional: Add an "empty" option if needed, but ComboBox handles empty well
                 QVariantMap empty;
                 empty["id"] = "";
                 empty["name"] = "无策略 (None)";
                 _strategyList.append(empty);
 
-                auto arr = j["data"];
-                for (const auto& item : arr) {
+                QJsonArray arr = j["data"].toArray();
+                for (const auto& val : arr) {
+                    QJsonObject item = val.toObject();
                     QVariantMap map;
-                    map["id"] = QString::fromStdString(item["id"]);
-                    map["name"] = QString::fromStdString(item["name"]);
+                    map["id"] = item["id"].toString();
+                    map["name"] = item["name"].toString();
                     _strategyList.append(map);
                 }
                 emit strategyListChanged();
@@ -438,25 +425,24 @@ void OrderController::onConditionOrderReturn(const QString& json) {
         }
 
         // Case 1: List Response (from condition order query)
-        // If it doesn't have explicit type RtnConditionOrder but has data array and NO type... (old behavior)
-        // OR type is correct.
-        if (j.contains("data") && j["data"].is_array()) {
+        if (j.contains("data") && j["data"].isArray()) {
             _conditionOrderList.clear();
-            auto arr = j["data"];
-            // 倒序插入，使最新的单子在最前面
-            for (auto it = arr.rbegin(); it != arr.rend(); ++it) {
-                const auto& item = *it;
+            QJsonArray arr = j["data"].toArray();
+            // 倒序插入
+            for (int i = arr.size() - 1; i >= 0; --i) {
+                QJsonObject item = arr[i].toObject();
                 QVariantMap map;
-                map["request_id"] = QString::number(item["request_id"].get<uint64_t>());
-                map["instrument_id"] = QString::fromStdString(item["instrument_id"]);
-                map["trigger_price"] = item["trigger_price"].get<double>();
-                map["compare_type"] = item["compare_type"].get<int>();
-                map["status"] = item["status"].get<int>();
-                map["direction"] = QString::fromStdString(item["direction"]);
-                map["offset_flag"] = QString::fromStdString(item["offset_flag"]);
-                map["volume"] = item["volume"].get<int>();
-                map["limit_price"] = item["limit_price"].get<double>();
-                map["strategy_id"] = QString::fromStdString(item["strategy_id"]);
+                // Use toVariant().toULongLong() for 64-bit int
+                map["request_id"] = QString::number(item["request_id"].toVariant().toULongLong());
+                map["instrument_id"] = item["instrument_id"].toString();
+                map["trigger_price"] = item["trigger_price"].toDouble();
+                map["compare_type"] = item["compare_type"].toInt();
+                map["status"] = item["status"].toInt();
+                map["direction"] = item["direction"].toString();
+                map["offset_flag"] = item["offset_flag"].toString();
+                map["volume"] = item["volume"].toInt();
+                map["limit_price"] = item["limit_price"].toDouble();
+                map["strategy_id"] = item["strategy_id"].toString();
                 _conditionOrderList.append(map);
             }
             emit conditionOrderListChanged();
@@ -465,46 +451,34 @@ void OrderController::onConditionOrderReturn(const QString& json) {
         }
 
         // Case 2: Single Push (from RtnConditionOrder)
-        // Check if it's wrapped in "data" or flat
-        auto data = j.contains("data") ? j["data"] : j;
+        QJsonObject data;
+        if (j.contains("data")) data = j["data"].toObject();
+        else data = j;
         
-        uint64_t reqId = data["request_id"].get<uint64_t>();
+        uint64_t reqId = data["request_id"].toVariant().toULongLong();
         QString reqIdStr = QString::number(reqId);
-        int newStatus = data["status"].get<int>();
+        int newStatus = data["status"].toInt();
         
         // Check if exists
         bool found = false;
         for (int i=0; i<_conditionOrderList.size(); ++i) {
             QVariantMap map = _conditionOrderList[i].toMap();
             if (map["request_id"].toString() == reqIdStr) {
-                // Update or Remove? 
-                // Creating a new map to update
-                // Always update status, don't remove.
                 int oldStatus = map["status"].toInt();
                 map["status"] = newStatus;
                 
-                // 更新价格和数量（如果后端返回了这些字段）
-                if (data.contains("trigger_price")) {
-                    map["trigger_price"] = data["trigger_price"].get<double>();
-                }
-                if (data.contains("limit_price")) {
-                    map["limit_price"] = data["limit_price"].get<double>();
-                }
-                if (data.contains("volume")) {
-                    map["volume"] = data["volume"].get<int>();
-                }
+                if (data.contains("trigger_price")) map["trigger_price"] = data["trigger_price"].toDouble();
+                if (data.contains("limit_price")) map["limit_price"] = data["limit_price"].toDouble();
+                if (data.contains("volume")) map["volume"] = data["volume"].toInt();
                 
                 _conditionOrderList[i] = map;
                 found = true;
                 
-                // 发送声音提示（仅在状态改变时）
                 if (oldStatus != newStatus) {
-                    if (newStatus == 1) {
-                        // 触发
+                    if (newStatus == 1) { // 触发
                         emit conditionOrderSound("triggered");
                         qDebug() << "[OrderController] Condition Order Triggered:" << reqIdStr;
-                    } else if (newStatus == 2) {
-                        // 取消
+                    } else if (newStatus == 2) { // 取消
                         emit conditionOrderSound("cancelled");
                         qDebug() << "[OrderController] Condition Order Cancelled:" << reqIdStr;
                     }
@@ -513,26 +487,25 @@ void OrderController::onConditionOrderReturn(const QString& json) {
             }
         }
         
-        if (!found) { // Allow triggered/cancelled orders to be loaded too
-            // New Order
+        if (!found) { 
             QVariantMap map;
             map["request_id"] = reqIdStr;
-            map["instrument_id"] = QString::fromStdString(data["instrument_id"]);
-            map["trigger_price"] = data["trigger_price"].get<double>();
-            map["compare_type"] = data["compare_type"].get<int>();
-            map["status"] = data["status"].get<int>();
-            map["direction"] = QString::fromStdString(data["direction"]);
-            map["offset_flag"] = QString::fromStdString(data["offset_flag"]);
-            map["volume"] = data["volume"].get<int>();
-            map["limit_price"] = data["limit_price"].get<double>();
-            map["strategy_id"] = QString::fromStdString(data["strategy_id"]);
-            _conditionOrderList.prepend(map);  // 插入到最前面
+            map["instrument_id"] = data["instrument_id"].toString();
+            map["trigger_price"] = data["trigger_price"].toDouble();
+            map["compare_type"] = data["compare_type"].toInt();
+            map["status"] = data["status"].toInt();
+            map["direction"] = data["direction"].toString();
+            map["offset_flag"] = data["offset_flag"].toString();
+            map["volume"] = data["volume"].toInt();
+            map["limit_price"] = data["limit_price"].toDouble();
+            map["strategy_id"] = data["strategy_id"].toString();
+            _conditionOrderList.prepend(map);
         }
         
         emit conditionOrderListChanged();
         
     } catch (const std::exception& e) {
-        qDebug() << "[OrderController] ConditionOrder Return Parse Error:" << e.what();
+        qDebug() << "[OrderController] Error:" << e.what();
     }
 }
 
@@ -562,7 +535,7 @@ void OrderController::sendConditionOrder(const QString& dataJson) {
         nlohmann::json data = nlohmann::json::parse(dataJson.toStdString());
         nlohmann::json req;
         // Use the constant from message_schema.h
-        req["type"] = atrad::CmdType::ConditionOrderInsert; 
+        req["type"] = QuantLabs::CmdType::ConditionOrderInsert; 
         req["data"] = data;
         emit orderSent(QString::fromStdString(req.dump()));
         qDebug() << "[OrderController] Condition Order Wrapped & Sent";
@@ -579,4 +552,4 @@ double OrderController::getInstrumentPriceTick(const QString& instrumentId) cons
     return (tick < 1e-6) ? 1.0 : tick;
 }
 
-} // namespace atrad
+} // namespace QuantLabs

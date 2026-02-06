@@ -8,7 +8,7 @@
 #include <chrono>
 #include "storage/DBManager.h"
 
-namespace atrad {
+namespace QuantLabs {
 
 TraderHandler::TraderHandler(std::map<std::string, std::string> config, Publisher& pub) : pub_(pub) {
     broker_id_ = config["broker_id"];
@@ -161,15 +161,20 @@ void TraderHandler::OnRspQryTradingAccount(CThostFtdcTradingAccountField *pAccou
 // ... (qryPosition, OnRspQryInvestorPosition, qryInstrument 等保持不变) ...
 
 void TraderHandler::pushCachedPositions() {
+    std::lock_guard<std::mutex> lock(position_mtx_);
     std::cout << "[Td] Pushing cached state (Account + " << position_cache_.size() << " Positions)..." << std::endl;
     
     // 1. 推送资金快照
     // 简单的判断：如果 balance 为 0 可能还没查回来，就不推了，或者推了也没事
     pub_.publishAccount(account_cache_);
 
-    // 2. 推送持仓快照
+    // 生成本次快照的批次号
+    int64_t seq = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+
+    // 2. 推送持仓快照（标记为全量快照批次）
     for (const auto& [key, data] : position_cache_) {
-        pub_.publishPosition(data);
+        pub_.publishPosition(data, seq); // 标记为 snapshot_seq
         if (instrument_cache_.find(data.instrument_id) != instrument_cache_.end()) {
             pub_.publishInstrument(instrument_cache_[data.instrument_id]);
         }
@@ -222,31 +227,17 @@ void TraderHandler::qryPosition() {
 
 void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pPos, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
     if (pPos && pPos->Position > 0) {
-        PositionData data;
-        std::strncpy(data.instrument_id, pPos->InstrumentID, sizeof(data.instrument_id));
-        std::strncpy(data.exchange_id, pPos->ExchangeID, sizeof(data.exchange_id)); // Added
-        data.direction = pPos->PosiDirection;
-        data.position = pPos->Position;
-        data.today_position = pPos->TodayPosition;
-        data.yd_position = pPos->YdPosition;
-        data.position_cost = pPos->PositionCost;
-        data.pos_profit = pPos->PositionProfit;
-        
-        // 更新缓存
-        std::string key = std::string(data.instrument_id) + "_" + std::to_string(data.direction);
-        position_cache_[key] = data;
-
-        pub_.publishPosition(data);
-        
-        // 查出持仓后，开启合约信息查询链
-        // 优化：将查询任务放入队列，避免此处直接调用导致流控或阻塞 CTP 线程
-        // 由 queueRateQuery 内部检查缓存新鲜度，此处无条件调用以确保数据校验
+        // [修正] 汇总查询不再更新持仓缓存，完全依赖持仓明细 (PositionDetail)
+        // 仅利用汇总查询的结果来触发费率查询，确保我们要交易的合约费率已加载
         queueRateQuery(pPos->InstrumentID);
     }
 
     if (bIsLast) {
-        std::cout << "[Td] Position Sync Completed. Total Cached: " << position_cache_.size() << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Short delay
+        std::cout << "[Td] Position Query Completed. Total Cached: " << position_cache_.size() << std::endl;
+        std::cout << "[Td] Waiting for PositionDetail query to recalculate accurate positions..." << std::endl;
+        
+        // 不在这里推送！等待 PositionDetail 查询完成后，基于明细重新计算并推送
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         qryPositionDetail();
     }
 }
@@ -422,11 +413,17 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
 }
 
 void TraderHandler::qryPositionDetail() {
+    // 发起查询前，必须清空历史明细队列，防止多次查询导致数据累加
+    {
+        std::lock_guard<std::mutex> lock(position_detail_mtx_);
+        open_position_queues_.clear();
+    }
+
     CThostFtdcQryInvestorPositionDetailField req;
     std::memset(&req, 0, sizeof(req));
     std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
     std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
-    std::cout << "[Td] Querying Investor Position Detail..." << std::endl;
+    std::cout << "[Td] Querying Investor Position Detail (Clearing old queues)..." << std::endl;
     td_api_->ReqQryInvestorPositionDetail(&req, 0);
 }
 
@@ -438,54 +435,129 @@ void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDet
 
     if (pDetail) {
         // 过滤已平仓明细 (CTP 有时会推送 Volume=0 的记录)
-        if (pDetail->Volume <= 0) return;
-
-        std::lock_guard<std::mutex> lock(position_detail_mtx_);
-        
-        // Key format: InstrumentID_Direction (0 for Buy/Long, 1 for Sell/Short)
-        // Note: For PositionDetail, Direction is the position direction (Buy=Long, Sell=Short)
-        std::string key = std::string(pDetail->InstrumentID) + "_" + std::to_string(pDetail->Direction);
-        
-        PositionDetailData item;
-        std::memset(&item, 0, sizeof(item)); // Ensure clean start
-        
-        std::strncpy(item.trade_id, pDetail->TradeID, sizeof(item.trade_id) - 1);
-        std::strncpy(item.instrument_id, pDetail->InstrumentID, sizeof(item.instrument_id) - 1);
-        std::strncpy(item.exchange_id, pDetail->ExchangeID, sizeof(item.exchange_id) - 1);
-        item.direction = pDetail->Direction;
-        item.open_price = pDetail->OpenPrice;
-        item.volume = pDetail->Volume; // Remaining volume
-        std::strncpy(item.open_date, pDetail->OpenDate, sizeof(item.open_date) - 1);
-        
-        item.margin = pDetail->Margin;
-        item.settlement_price = pDetail->SettlementPrice;
-        item.close_profit_by_date = pDetail->CloseProfitByDate;
-        item.close_profit_by_trade = pDetail->CloseProfitByTrade;
-        item.position_profit_by_date = pDetail->PositionProfitByDate;
-        item.position_profit_by_trade = pDetail->PositionProfitByTrade;
-        
-        open_position_queues_[key].push_back(item);
-        
-        std::cout << "[Td Detail] Loaded Pos: " << item.instrument_id << " Dir:" << (int)item.direction 
-                  << " Price:" << item.open_price << " Vol:" << item.volume 
-                  << " Date:" << item.open_date << std::endl;
+        if (pDetail->Volume > 0) {
+            std::lock_guard<std::mutex> lock(position_detail_mtx_);
+            
+            // Key format: InstrumentID_Direction (0 for Buy/Long, 1 for Sell/Short)
+            // Note: For PositionDetail, Direction is the position direction (Buy=Long, Sell=Short)
+            std::string key = std::string(pDetail->InstrumentID) + "_" + std::string(1, pDetail->Direction);
+            
+            PositionDetailData item;
+            std::memset(&item, 0, sizeof(item)); // Ensure clean start
+            
+            std::strncpy(item.trade_id, pDetail->TradeID, sizeof(item.trade_id) - 1);
+            std::strncpy(item.instrument_id, pDetail->InstrumentID, sizeof(item.instrument_id) - 1);
+            std::strncpy(item.exchange_id, pDetail->ExchangeID, sizeof(item.exchange_id) - 1);
+            item.direction = pDetail->Direction;
+            item.open_price = pDetail->OpenPrice;
+            item.volume = pDetail->Volume; // Remaining volume
+            std::strncpy(item.open_date, pDetail->OpenDate, sizeof(item.open_date) - 1);
+            
+            item.margin = pDetail->Margin;
+            item.settlement_price = pDetail->LastSettlementPrice; // Store PreSettlementPrice for Cost Calc
+            item.close_profit_by_date = pDetail->CloseProfitByDate;
+            item.close_profit_by_trade = pDetail->CloseProfitByTrade;
+            item.position_profit_by_date = pDetail->PositionProfitByDate;
+            item.position_profit_by_trade = pDetail->PositionProfitByTrade;
+            
+            open_position_queues_[key].push_back(item);
+            
+            std::cout << "[Td Detail] Loaded Pos: " << item.instrument_id << " Dir:" << (int)item.direction 
+                      << " Price:" << item.open_price << " Vol:" << item.volume 
+                      << " Date:" << item.open_date << std::endl;
+        }
     }
 
     if (bIsLast) {
-        std::cout << "[Td] Position Detail Query Completed. Sort queues..." << std::endl;
+        std::cout << "[Td] Position Detail Query Completed. Recalculating positions..." << std::endl;
         std::lock_guard<std::mutex> lock(position_detail_mtx_);
+        
+        // 1. 排序队列（FIFO）
         for (auto& [key, queue] : open_position_queues_) {
-            // Sort by OpenDate, TradeID just to be sure FIFO order is correct
-             std::sort(queue.begin(), queue.end(), [](const PositionDetailData& a, const PositionDetailData& b) {
-                 int date_cmp = std::strcmp(a.open_date, b.open_date);
-                 if (date_cmp != 0) return date_cmp < 0;
-                 return std::strcmp(a.trade_id, b.trade_id) < 0;
-             });
+            std::sort(queue.begin(), queue.end(), [](const PositionDetailData& a, const PositionDetailData& b) {
+                int date_cmp = std::strcmp(a.open_date, b.open_date);
+                if (date_cmp != 0) return date_cmp < 0;
+                return std::strcmp(a.trade_id, b.trade_id) < 0;
+            });
         }
+        
+        // 2. 根据明细重新计算持仓汇总（这才是真实的剩余持仓）
+        std::lock_guard<std::mutex> pos_lock(position_mtx_);
+        
+        // 清空旧的持仓缓存（因为要基于明细重建）
+        position_cache_.clear();
+        
+        // 生成本次快照的批次号
+        int64_t seq = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        for (const auto& [key, queue] : open_position_queues_) {
+            if (queue.empty()) continue;
+            
+            // 从 key 中解析出 instrument_id 和 direction
+            // key 格式: "rb2610_2" (instrument_direction)
+            size_t pos = key.find_last_of('_');
+            if (pos == std::string::npos) continue;
+            
+            std::string instrument_id = key.substr(0, pos);
+            char direction = key[pos + 1];
+            
+            // 累加明细计算总仓、今仓、昨仓
+            PositionData& data = position_cache_[key];
+            std::memset(&data, 0, sizeof(data));
+            
+            std::strncpy(data.instrument_id, instrument_id.c_str(), sizeof(data.instrument_id) - 1);
+            std::strncpy(data.exchange_id, queue[0].exchange_id, sizeof(data.exchange_id) - 1);
+            data.direction = direction;
+            
+            for (const auto& detail : queue) {
+                // 只累加剩余持仓 > 0 的明细（已平仓的明细 volume=0 要跳过）
+                if (detail.volume <= 0) continue;
+                
+                data.position += detail.volume;
+                
+                // 判断今仓/昨仓：比对 open_date 和 current_trading_day_
+                if (std::strcmp(detail.open_date, current_trading_day_.c_str()) == 0) {
+                    data.today_position += detail.volume;
+                } else {
+                    data.yd_position += detail.volume;
+                }
+                
+                // 修正: PositionCost = Price * Volume * Multiplier
+                // 对于上期所 (SHFE) 和能源中心 (INE)，昨仓成本按昨结算价计算 (逐日盯市)
+                // 其他情况按开仓价计算
+                double price_basis = detail.open_price;
+                std::string exch(data.exchange_id);
+                if ((exch == "SHFE" || exch == "INE") && 
+                    std::strcmp(detail.open_date, current_trading_day_.c_str()) != 0) {
+                        price_basis = detail.settlement_price; // 这里的 settlement_price 实际上存的是 LastSettlementPrice
+                }
+                
+                int multiplier = 1;
+                if (instrument_cache_.find(data.instrument_id) != instrument_cache_.end()) {
+                    multiplier = instrument_cache_[data.instrument_id].volume_multiple;
+                }
+                
+                double cost = price_basis * detail.volume * multiplier;
+                data.position_cost += cost;
+                data.pos_profit += detail.position_profit_by_trade;
+            }
+            
+            std::cout << "[Td] Recalculated Position: " << data.instrument_id 
+                      << " Dir:" << (int)data.direction
+                      << " Total:" << data.position 
+                      << " Today:" << data.today_position 
+                      << " Yd:" << data.yd_position << std::endl;
+            
+            // 推送修正后的持仓数据（标记为全量快照批次）
+            pub_.publishPosition(data, seq);
+        }
+        
+        std::cout << "[Td] Position recalculation completed. Total positions: " << position_cache_.size() << std::endl;
     }
 }
 
-int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id) {
+int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, char priceType, const std::string& strategy_id) {
     CThostFtdcInputOrderField req;
     std::memset(&req, 0, sizeof(req));
     std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
@@ -531,12 +603,9 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
         int final_ms = current_ms + ms_offset;
         
         // 极端兜底: CTP Ref 长度限制，必须保持3位。
-        // 如果一毫秒内真的发了 >10 单导致溢出，这在物理网络IO下极难发生。
-        // 如果发生，为了不乱码，只能取模或截断(可能会重复)，但在实盘中不太可能。
         if (final_ms > 999) final_ms = 999; 
 
         // 4. 极速拼接: Prefix(8) + MS(3) -> Ref(11)
-        // 手动拷贝和转换，比 sprintf 快
         std::memcpy(ref, cached_ref_prefix_, 8);
         
         // 快速 int 转 3位 char
@@ -558,10 +627,10 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
 
     if (exchId == "SHFE" || exchId == "INE") {
         // Determine Position Direction to close
-        // Buy(0) Close -> Short(3) Pos; Sell(1) Close -> Long(2) Pos
         char posDir = (direction == THOST_FTDC_D_Buy) ? THOST_FTDC_PD_Short : THOST_FTDC_PD_Long;
         std::string key = instrument + "_" + std::to_string(posDir);
         
+        std::lock_guard<std::mutex> lock(position_mtx_);
         if (position_cache_.count(key)) {
             const auto& pos = position_cache_[key];
             
@@ -582,14 +651,28 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
         }
     }
 
-    req.OrderPriceType = THOST_FTDC_OPT_LimitPrice;
+    req.OrderPriceType = priceType;
     req.Direction = direction; 
     req.CombOffsetFlag[0] = finalOffset;
     req.CombHedgeFlag[0] = THOST_FTDC_HF_Speculation;
-    req.LimitPrice = price;
+    
+    if (priceType == THOST_FTDC_OPT_AnyPrice) {
+        // [FIX] SHFE/INE rejects AnyPrice. Use LimitPrice with actual price + IOC for market behavior.
+        // Frontend passes lastPrice, which is a reasonable base for immediate execution.
+        req.OrderPriceType = THOST_FTDC_OPT_LimitPrice;
+        req.LimitPrice = price; // Use the price passed from frontend (lastPrice)
+        req.TimeCondition = THOST_FTDC_TC_IOC; 
+        req.VolumeCondition = THOST_FTDC_VC_AV;
+        
+        std::cout << "[Td] Simulating Market Order (IOC): " << instrument 
+                  << " Dir:" << direction << " Price:" << req.LimitPrice << std::endl;
+    } else {
+        req.LimitPrice = price;
+        req.TimeCondition = THOST_FTDC_TC_GFD;
+        req.VolumeCondition = THOST_FTDC_VC_AV;
+    }
+
     req.VolumeTotalOriginal = volume;
-    req.TimeCondition = THOST_FTDC_TC_GFD;
-    req.VolumeCondition = THOST_FTDC_VC_AV;
     req.ContingentCondition = THOST_FTDC_CC_Immediately;
     req.ForceCloseReason = THOST_FTDC_FCC_NotForceClose;
     req.IsAutoSuspend = 0;
@@ -738,8 +821,12 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
             if (pTrade->OffsetFlag == THOST_FTDC_OF_Open) {
                 // [Open Trade] Add to FIFO queue
                 std::lock_guard<std::mutex> lock(position_detail_mtx_);
-                // Key: InstrumentID + Direction (Open Buy -> Long Pos(Buy), Open Sell -> Short Pos(Sell))
-                std::string key = std::string(pTrade->InstrumentID) + "_" + std::to_string(pTrade->Direction);
+                
+                // Map Trade Direction to Position Direction (0->2, 1->3)
+                char pos_dir = (pTrade->Direction == THOST_FTDC_D_Buy) ? THOST_FTDC_PD_Long : THOST_FTDC_PD_Short;
+                
+                // Key: InstrumentID + Direction
+                std::string key = std::string(pTrade->InstrumentID) + "_" + std::string(1, pos_dir);
                 
                 PositionDetailData item;
                 std::memset(&item, 0, sizeof(item));
@@ -747,7 +834,7 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
                 std::strncpy(item.trade_id, pTrade->TradeID, sizeof(item.trade_id) - 1);
                 std::strncpy(item.instrument_id, pTrade->InstrumentID, sizeof(item.instrument_id) - 1);
                 std::strncpy(item.exchange_id, pTrade->ExchangeID, sizeof(item.exchange_id) - 1);
-                item.direction = pTrade->Direction;
+                item.direction = pos_dir; // Store Position Direction '2'/'3'
                 item.open_price = pTrade->Price;
                 item.volume = pTrade->Volume;
                 // Use current trading day for new trades
@@ -762,7 +849,7 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
                 // Trade Direction Buy -> Closing Short Position (Sell direction in queue)
                 // Trade Direction Sell -> Closing Long Position (Buy direction in queue)
                 char pos_dir = (pTrade->Direction == THOST_FTDC_D_Buy) ? THOST_FTDC_PD_Short : THOST_FTDC_PD_Long;
-                std::string key = std::string(pTrade->InstrumentID) + "_" + std::to_string(pos_dir);
+                std::string key = std::string(pTrade->InstrumentID) + "_" + std::string(1, pos_dir);
                 
                 std::lock_guard<std::mutex> lock(position_detail_mtx_);
                 if (open_position_queues_.find(key) != open_position_queues_.end()) {
@@ -862,8 +949,8 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
         }
         
         // 4. 更新本地持仓和资金
-        updateLocalPosition(pTrade);
-        updateLocalAccount(pTrade);
+        // [FIX] Duplicate Call removed here to prevent double-counting.
+        // It is called at the end of function (Lines 880+) for ALL trades.
     }
     
     // 实时更新本地缓存
@@ -872,6 +959,7 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
 }
 
 void TraderHandler::updateLocalPosition(CThostFtdcTradeField *pTrade) {
+    std::lock_guard<std::mutex> lock(position_mtx_);
     std::string instrument = pTrade->InstrumentID;
     
     // 确定持仓方向：买开/卖平 -> 多头变化；卖开/买平 -> 空头变化
@@ -885,7 +973,7 @@ void TraderHandler::updateLocalPosition(CThostFtdcTradeField *pTrade) {
         else pos_direction = THOST_FTDC_PD_Long; // 卖平 -> 多头(减)
     }
 
-    std::string key = instrument + "_" + std::to_string(pos_direction);
+    std::string key = instrument + "_" + std::string(1, pos_direction);
     
     // 如果是开仓，可能需要新建
     if (position_cache_.find(key) == position_cache_.end()) {
@@ -1125,4 +1213,4 @@ void TraderHandler::syncSubscribedInstruments() {
     std::cout << "[Td] Synced " << count << " subscribed instruments." << std::endl;
 }
 
-} // namespace atrad
+} // namespace QuantLabs

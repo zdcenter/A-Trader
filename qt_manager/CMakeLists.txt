@@ -52,7 +52,12 @@ find_package(nlohmann_json REQUIRED)
 # 资源文件处理
 qt_add_resources(RESOURCES qml/qml.qrc resources/resources.qrc)
 
-add_executable(${PROJECT_NAME}
+set(APP_ICON_RESOURCE "")
+if(WIN32)
+    set(APP_ICON_RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.rc")
+endif()
+
+add_executable(${PROJECT_NAME} WIN32
     src/main.cpp
     src/network/ZmqWorker.cpp
     src/models/MarketModel.cpp
@@ -62,6 +67,7 @@ add_executable(${PROJECT_NAME}
     src/models/OrderModel.cpp
     src/models/TradeModel.cpp
     ${RESOURCES}
+    ${APP_ICON_RESOURCE}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

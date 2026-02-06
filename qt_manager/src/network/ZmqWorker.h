@@ -1,12 +1,14 @@
 #pragma once
 
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <QObject>
 #include <QThread>
 #include <QString>
 #include <zmq.hpp>
-#include <nlohmann/json.hpp>
 
-namespace atrad {
+
+namespace QuantLabs {
 
 class ZmqWorker : public QObject {
     Q_OBJECT
@@ -30,26 +32,29 @@ signals:
     /**
      * @brief 收到新的行情 JSON 时触发
      */
-    void tickReceived(const QString& json);
+    /**
+     * @brief 收到新的行情 JSON 时触发
+     */
+    void tickReceived(const QJsonObject& json);
 
     /**
      * @brief 收到持仓 JSON 时触发
      */
-    void positionReceived(const QString& json);
+    void positionReceived(const QJsonObject& json);
 
     /**
      * @brief 收到账户资金 JSON 时触发
      */
-    void accountReceived(const QString& json);
+    void accountReceived(const QJsonObject& json);
 
     /**
      * @brief 收到合约属性 JSON 时触发
      */
-    void instrumentReceived(const QString& json);
+    void instrumentReceived(const QJsonObject& json);
 
-    void orderReceived(const QString& json);
-    void tradeReceived(const QString& json);
-    void conditionOrderReceived(const QString& json); // Added for Strategy Push
+    void orderReceived(const QJsonObject& json);
+    void tradeReceived(const QJsonObject& json);
+    void conditionOrderReceived(const QJsonObject& json); // Added for Strategy Push
     
     /**
      * @brief 状态更新信号
@@ -64,4 +69,4 @@ private:
     zmq::socket_t _subscriber;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

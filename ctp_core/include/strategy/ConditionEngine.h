@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <string>
 
-namespace atrad {
+namespace QuantLabs {
 
 class ConditionEngine {
 public:
@@ -44,4 +44,4 @@ private:
     StatusCallback status_callback_;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

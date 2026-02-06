@@ -1,10 +1,11 @@
 #pragma once
 
+#include <QJsonObject>
 #include <QAbstractListModel>
 #include <vector>
 #include <mutex>
 
-namespace atrad {
+namespace QuantLabs {
 
 struct TradeItem {
     QString instrument_id;
@@ -43,12 +44,15 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+signals:
+    void tradeSoundTriggered();
+
 public slots:
-    void onTradeReceived(const QString& json);
+    void onTradeReceived(const QJsonObject& json);
 
 private:
     std::vector<TradeItem> _trades;
     mutable std::mutex _mutex;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

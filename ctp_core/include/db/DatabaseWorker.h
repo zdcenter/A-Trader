@@ -8,7 +8,7 @@
 #include <atomic>
 #include "protocol/message_schema.h"
 
-namespace atrad {
+namespace QuantLabs {
 
 /**
  * @brief 异步落库工人
@@ -36,4 +36,4 @@ private:
     std::atomic<bool> running_{false};
 };
 
-} // namespace atrad
+} // namespace QuantLabs

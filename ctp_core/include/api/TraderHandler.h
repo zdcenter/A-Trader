@@ -21,7 +21,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace atrad {
+namespace QuantLabs {
 
 class Publisher;
 
@@ -45,7 +45,7 @@ public:
     void qryPositionDetail(); // 查询持仓明细（用于FIFO匹配）
 
     // 下单接口
-    int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, const std::string& strategy_id = "");
+    int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, char priceType = '2', const std::string& strategy_id = "");
     
     // 撤单 Action
     int cancelOrder(const std::string& instrument, const std::string& orderSysID, const std::string& orderRef, const std::string& exchangeID, int frontID, int sessionID);
@@ -111,6 +111,7 @@ private:
     // 缓存 (恢复)
     std::map<std::string, InstrumentData> instrument_cache_;
     std::map<std::string, PositionData> position_cache_;
+    std::mutex position_mtx_; // Protected position_cache_
     AccountData account_cache_;
 
     // 查询队列 (线程安全)
@@ -160,4 +161,4 @@ private:
     std::mutex position_detail_mtx_;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

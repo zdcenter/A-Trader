@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace atrad {
+namespace QuantLabs {
 namespace zmq_topics {
 
 /**
@@ -83,5 +83,5 @@ inline const char* REQ_CMD_ADDR = "tcp://127.0.0.1:5556";
 
 static constexpr const char* TOPIC_STRATEGY = "ST"; // Added for Strategy/Condition updates
 
-} // namespace atrad
+} // namespace QuantLabs
 

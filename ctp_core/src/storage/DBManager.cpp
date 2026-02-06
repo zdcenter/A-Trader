@@ -3,7 +3,7 @@
 #include <thread>
 #include <cstring>
 
-namespace atrad {
+namespace QuantLabs {
 
 void DBManager::init(const std::string& connStr) {
     if (running_) return;
@@ -591,4 +591,4 @@ std::vector<TradeData> DBManager::loadAllTradesAsc() {
     return list;
 }
 
-} // namespace atrad
+} // namespace QuantLabs

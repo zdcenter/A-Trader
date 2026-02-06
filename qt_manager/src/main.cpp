@@ -17,13 +17,15 @@
 #include "protocol/zmq_topics.h"
 
 #include <QFont>
+#include <QIcon>  // Added
 
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
+    app.setWindowIcon(QIcon(":/app_icon.png")); // 设置窗口图标
     
     // 设置应用程序信息（用于 Settings 持久化）
-    app.setOrganizationName("ATrader");
-    app.setOrganizationDomain("atrader.local");
+    app.setOrganizationName("QuantLabs");
+    app.setOrganizationDomain("quantlabs.local");
     app.setApplicationName("qt_manager");
     
     // 加载配置文件
@@ -40,9 +42,9 @@ int main(int argc, char *argv[]) {
             int repPort = conn["rep_port"].toInt(5556);
             
             // 配置 ZMQ 地址
-            atrad::zmq_topics::Config::instance().setServerAddress(serverAddr.toStdString());
-            atrad::zmq_topics::Config::instance().setPubPort(pubPort);
-            atrad::zmq_topics::Config::instance().setRepPort(repPort);
+            QuantLabs::zmq_topics::Config::instance().setServerAddress(serverAddr.toStdString());
+            QuantLabs::zmq_topics::Config::instance().setPubPort(pubPort);
+            QuantLabs::zmq_topics::Config::instance().setRepPort(repPort);
             
             qDebug() << "[Main] Loaded config: Server =" << serverAddr 
                      << "PubPort =" << pubPort << "RepPort =" << repPort;
@@ -67,12 +69,12 @@ int main(int argc, char *argv[]) {
 
     QQmlApplicationEngine engine;
 
-    atrad::MarketModel* marketModel = new atrad::MarketModel(&app);
-    atrad::PositionModel* positionModel = new atrad::PositionModel(&app);
-    atrad::AccountInfo* accountInfo = new atrad::AccountInfo(&app);
-    atrad::OrderController* orderController = new atrad::OrderController(&app);
-    atrad::OrderModel* orderModel = new atrad::OrderModel(&app);
-    atrad::TradeModel* tradeModel = new atrad::TradeModel(&app);
+    QuantLabs::MarketModel* marketModel = new QuantLabs::MarketModel(&app);
+    QuantLabs::PositionModel* positionModel = new QuantLabs::PositionModel(&app);
+    QuantLabs::AccountInfo* accountInfo = new QuantLabs::AccountInfo(&app);
+    QuantLabs::OrderController* orderController = new QuantLabs::OrderController(&app);
+    QuantLabs::OrderModel* orderModel = new QuantLabs::OrderModel(&app);
+    QuantLabs::TradeModel* tradeModel = new QuantLabs::TradeModel(&app);
 
     qDebug() << "[Main] Created marketModel:" << marketModel << "rows:" << marketModel->rowCount();
     
@@ -88,49 +90,49 @@ int main(int argc, char *argv[]) {
 
     // 2. 创建 ZMQ 工作线程
     QThread* workerThread = new QThread();
-    atrad::ZmqWorker* worker = new atrad::ZmqWorker();
+    QuantLabs::ZmqWorker* worker = new QuantLabs::ZmqWorker();
     worker->moveToThread(workerThread);
     
     // 连接信号
-    QObject::connect(workerThread, &QThread::started, worker, &atrad::ZmqWorker::process);
+    QObject::connect(workerThread, &QThread::started, worker, &QuantLabs::ZmqWorker::process);
     
     // 分发不同主题的消息
-    QObject::connect(worker, &atrad::ZmqWorker::tickReceived, marketModel, &atrad::MarketModel::updateTick);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceived, marketModel, &QuantLabs::MarketModel::updateTick);
     // 行情同时也发给持仓模型计算盈亏
-    QObject::connect(worker, &atrad::ZmqWorker::tickReceived, positionModel, &atrad::PositionModel::updatePrice);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceived, positionModel, &QuantLabs::PositionModel::updatePrice);
     
-    QObject::connect(worker, &atrad::ZmqWorker::positionReceived, positionModel, &atrad::PositionModel::updatePosition);
-    QObject::connect(worker, &atrad::ZmqWorker::accountReceived, accountInfo, &atrad::AccountInfo::updateAccount);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::positionReceived, positionModel, &QuantLabs::PositionModel::updatePosition);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::accountReceived, accountInfo, &QuantLabs::AccountInfo::updateAccount);
     // 连接合约信息到 MarketModel，确保订阅后能立即显示条目
-    QObject::connect(worker, &atrad::ZmqWorker::instrumentReceived, marketModel, &atrad::MarketModel::handleInstrument);
-    QObject::connect(worker, &atrad::ZmqWorker::instrumentReceived, positionModel, &atrad::PositionModel::updateInstrument);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::instrumentReceived, marketModel, &QuantLabs::MarketModel::handleInstrument);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::instrumentReceived, positionModel, &QuantLabs::PositionModel::updateInstrument);
 
-    QObject::connect(worker, &atrad::ZmqWorker::instrumentReceived, orderController, &atrad::OrderController::updateInstrument);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::instrumentReceived, orderController, &QuantLabs::OrderController::updateInstrument);
     
-    QObject::connect(worker, &atrad::ZmqWorker::orderReceived, orderModel, &atrad::OrderModel::onOrderReceived);
-    QObject::connect(worker, &atrad::ZmqWorker::tradeReceived, tradeModel, &atrad::TradeModel::onTradeReceived);
-    QObject::connect(worker, &atrad::ZmqWorker::positionReceived, orderController, &atrad::OrderController::onPositionReceived);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::orderReceived, orderModel, &QuantLabs::OrderModel::onOrderReceived);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tradeReceived, tradeModel, &QuantLabs::TradeModel::onTradeReceived);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::positionReceived, orderController, &QuantLabs::OrderController::onPositionReceived);
     
     // 连接状态更新 (Worker -> OrderController)
-    QObject::connect(worker, &atrad::ZmqWorker::statusUpdated, 
-                     orderController, &atrad::OrderController::updateConnectionStatus,
+    QObject::connect(worker, &QuantLabs::ZmqWorker::statusUpdated, 
+                     orderController, &QuantLabs::OrderController::updateConnectionStatus,
                      Qt::QueuedConnection);
 
     // 连接行情到 OrderController 以实现自动跟价
-    QObject::connect(worker, &atrad::ZmqWorker::tickReceived, orderController, &atrad::OrderController::onTick);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceived, orderController, &QuantLabs::OrderController::onTick);
     
     // 发送指令链路 (UI -> Controller -> ZmqWorker -> Core)
     // 显式使用 QueuedConnection 因为 worker 在另一个线程
-    bool connected = QObject::connect(orderController, &atrad::OrderController::orderSent, 
-                                     worker, &atrad::ZmqWorker::sendCommand, 
+    bool connected = QObject::connect(orderController, &QuantLabs::OrderController::orderSent, 
+                                     worker, &QuantLabs::ZmqWorker::sendCommand, 
                                      Qt::QueuedConnection);
     qDebug() << "[Main] orderController.orderSent -> worker.sendCommand connection:" << (connected ? "SUCCESS" : "FAILED");
     
     // 连接持仓总盈亏到资金面板
-    QObject::connect(positionModel, &atrad::PositionModel::totalProfitChanged, accountInfo, &atrad::AccountInfo::setFloatingProfit);
-    QObject::connect(worker, &atrad::ZmqWorker::conditionOrderReceived, orderController, &atrad::OrderController::onConditionOrderReturn);
+    QObject::connect(positionModel, &QuantLabs::PositionModel::totalProfitChanged, accountInfo, &QuantLabs::AccountInfo::setFloatingProfit);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::conditionOrderReceived, orderController, &QuantLabs::OrderController::onConditionOrderReturn);
     
-    QObject::connect(&app, &QGuiApplication::aboutToQuit, worker, &atrad::ZmqWorker::stop);
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, worker, &QuantLabs::ZmqWorker::stop);
     QObject::connect(&app, &QGuiApplication::aboutToQuit, workerThread, &QThread::quit);
     QObject::connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
     QObject::connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater);

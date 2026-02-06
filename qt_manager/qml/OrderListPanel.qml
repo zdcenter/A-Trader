@@ -69,15 +69,15 @@ FocusScope {
                 spacing: 0
                 
                 // 1. 报单编号 (10%)
-                Text { width: parent.width * 0.10; text: "报单编号"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.09; text: "报单编号"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 2. 合约 (10%)
-                Text { width: parent.width * 0.10; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.09; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 3. 买卖 (5%)
                 Text { width: parent.width * 0.05; text: "买卖"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 4. 开平 (5%)
-                Text { width: parent.width * 0.05; text: "开平"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.06; text: "开平"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 6. 价格 (10%)
-                Text { width: parent.width * 0.10; text: "委托价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.12; text: "委托价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 7. 报单 (6%)
                 Text { width: parent.width * 0.06; text: "报单"; color: "#aaaaaa"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 8. 未成 (6%)
@@ -87,14 +87,15 @@ FocusScope {
                 // 5. 状态 (8%)
                 Text { width: parent.width * 0.08; text: "状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 10. 详细状态 (22%)
-                Text { width: parent.width * 0.22; text: "详细状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.20; text: "详细状态"; color: "#aaaaaa"; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
                 // 11. 报单时间 (12%)
-                Text { width: parent.width * 0.12; text: "报单时间"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                Text { width: parent.width * 0.13; text: "报单时间"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
             }
         }
         
         // 列表
         ListView {
+            id: orderListView
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: root.orderModel
@@ -104,13 +105,13 @@ FocusScope {
             
             delegate: Rectangle {
                 id: orderDelegate
-                width: ListView.view.width
+                width: orderListView.width
                 height: 35
                 
                 // 统一的选中和悬停样式
                 color: {
-                    if (mouseArea.containsMouse && ListView.view.currentIndex === index) return "#3a5a7a"
-                    if (ListView.view.currentIndex === index) return "#2c5d87"
+                    if (mouseArea.containsMouse && ListView.isCurrentItem) return "#3a5a7a"
+                    if (ListView.isCurrentItem) return "#2c5d87"
                     if (mouseArea.containsMouse) return "#2a2a2a"
                     return index % 2 === 0 ? "#1e1e1e" : "#252526"
                 }
@@ -167,7 +168,7 @@ FocusScope {
                     
                     // 1. 报单编号 (10%) - 优先显示 orderSysId，为空则显示 orderRef
                     Text { 
-                        width: parent.width * 0.10; 
+                        width: parent.width * 0.09; 
                         text: orderSysId || ("#" + orderRef); 
                         color: orderSysId ? "#cccccc" : "#888888"; 
                         font.family: "Consolas"; 
@@ -176,13 +177,13 @@ FocusScope {
                         elide: Text.ElideRight 
                     }
                     // 2. 合约 (10%)
-                    Text { width: parent.width * 0.10; text: instrumentId; color: "#4ec9b0"; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.09; text: instrumentId; color: "#4ec9b0"; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 3. 买卖 (5%)
                     Text { width: parent.width * 0.05; text: getDirText(direction); color: direction === "0" ? "#f44336" : "#4caf50"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 4. 开平 (5%)
-                    Text { width: parent.width * 0.05; text: getOffsetFlagText(offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.06; text: getOffsetFlagText(offsetFlag); color: "white"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 6. 价格 (10%)
-                    Text { width: parent.width * 0.10; text: price.toFixed(2); color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.12; text: price.toFixed(2); color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 7. 报单 (6%)
                     Text { width: parent.width * 0.06; text: volumeOriginal; color: "white"; font.family: "Consolas"; horizontalAlignment: Text.AlignRight; rightPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 8. 未成 (6%)
@@ -192,9 +193,9 @@ FocusScope {
                     // 5. 状态 (8%)
                     Text { width: parent.width * 0.08; text: getStatusText(status); color: getStatusColor(status); horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     // 10. 详细状态 (22%)
-                    Text { width: parent.width * 0.22; text: statusMsg; color: "#aaaaaa"; font.pixelSize: 11; elide: Text.ElideRight; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.20; text: statusMsg; color: "#aaaaaa"; font.pixelSize: 11; elide: Text.ElideRight; horizontalAlignment: Text.AlignLeft; leftPadding: 10; anchors.verticalCenter: parent.verticalCenter }
                     // 11. 报单时间 (12%)
-                    Text { width: parent.width * 0.12; text: time; color: "#cccccc"; font.family: "Consolas"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    Text { width: parent.width * 0.13; text: time; color: "#cccccc"; font.family: "Consolas"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                 }
 
                 MouseArea {
@@ -203,7 +204,7 @@ FocusScope {
                     hoverEnabled: true 
                     
                     onClicked: {
-                        ListView.view.currentIndex = index
+                        orderListView.currentIndex = index
                         if(root.orderController) {
                             root.orderController.instrumentId = instrumentId
                         }

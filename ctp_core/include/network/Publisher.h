@@ -7,7 +7,7 @@
 #include <string>
 #include <memory>
 
-namespace atrad {
+namespace QuantLabs {
 
 class Publisher {
 public:
@@ -27,8 +27,10 @@ public:
 
     /**
      * @brief 发送持仓数据
+     * @param data 持仓数据
+     * @param snapshot_seq 快照批次号（0=增量更新，>0=快照批次ID）
      */
-    void publishPosition(const PositionData& data);
+    void publishPosition(const PositionData& data, int64_t snapshot_seq = 0);
 
     /**
      * @brief 发送合约基础信息
@@ -61,4 +63,4 @@ private:
     std::unique_ptr<zmq::socket_t> publisher_;
 };
 
-} // namespace atrad
+} // namespace QuantLabs

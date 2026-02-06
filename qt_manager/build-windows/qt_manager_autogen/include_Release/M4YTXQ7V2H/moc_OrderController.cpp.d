@@ -46,6 +46,7 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/M4YTXQ7V2H/moc_Or
   C:/vcpkg/installed/x64-windows/include/nlohmann/thirdparty/hedley/hedley.hpp \
   C:/vcpkg/installed/x64-windows/include/nlohmann/thirdparty/hedley/hedley_undef.hpp \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/QHash \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/QJsonObject \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/QList \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/QObject \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/QString \
@@ -72,6 +73,9 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/M4YTXQ7V2H/moc_Or
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qbytearrayalgorithms.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qbytearraylist.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qbytearrayview.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qcalendar.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qcborcommon.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qcborvalue.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qchar.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qcompare.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qcompare_impl.h \
@@ -85,7 +89,9 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/M4YTXQ7V2H/moc_Or
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qcontiguouscache.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qdarwinhelpers.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qdatastream.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qdatetime.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qdebug.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qendian.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qexceptionhandling.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qflags.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qfloat16.h \
@@ -100,8 +106,13 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/M4YTXQ7V2H/moc_Or
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qiodevicebase.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qiterable.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qiterator.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qjsondocument.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qjsonobject.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qjsonparseerror.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qjsonvalue.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qlatin1stringview.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qlist.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qlocale.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qlogging.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qmalloc.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qmap.h \
@@ -119,6 +130,7 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/M4YTXQ7V2H/moc_Or
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qpair.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qprocessordetection.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qrefcount.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qregularexpression.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qscopedpointer.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qscopeguard.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qset.h \
@@ -162,7 +174,9 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/M4YTXQ7V2H/moc_Or
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qtversionchecks.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qtypeinfo.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qtypes.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qurl.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qutf8stringview.h \
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/quuid.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qvariant.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qvarlengtharray.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qversiontagging.h \

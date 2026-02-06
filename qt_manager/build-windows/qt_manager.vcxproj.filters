@@ -53,6 +53,11 @@
     <Natvis Include="C:\vcpkg\installed\x64-windows\share\nlohmann_json\nlohmann_json.natvis" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="Z:\qt_manager\resources\app_icon.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
     <Filter Include="Source Files">
       <UniqueIdentifier>{B3FF4723-832B-3B12-B674-B9D563656186}</UniqueIdentifier>
     </Filter>
