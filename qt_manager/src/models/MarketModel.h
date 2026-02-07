@@ -57,6 +57,7 @@ public slots:
      * @param json 来自 ZmqWorker 的消息
      */
     void updateTick(const QJsonObject& json);
+    void updateTickBinary(const TickData& data);
     // 处理合约信息 (订阅后立即显示)
     void handleInstrument(const QJsonObject& json);
     void removeInstrument(const QString& instrumentId);

@@ -97,6 +97,7 @@ public:
 
 public slots:
     void onTick(const QJsonObject& json);
+    void onTickBinary(const TickData& data);
     void updateInstrument(const QJsonObject& json);
     Q_INVOKABLE void sendOrder(const QString& direction, const QString& offset, const QString& priceType = "LIMIT");
     void cancelOrder(const QString& instrumentId, const QString& orderSysId, const QString& orderRef, const QString& exchangeId, int frontId, int sessionId); // Added
@@ -107,7 +108,10 @@ public slots:
     void setManualPrice(bool manual) { _isManualPrice = manual; emit orderParamsChanged(); }
 
     // 由 ZmqWorker 调用
-    void updateConnectionStatus(bool core, bool ctp);
+    // 由 Workers 调用
+    void updateConnectionStatus(bool core, bool ctp); // Keep for compatibility if needed, or remove
+    void updateCoreStatus(bool connected);
+    void updateCtpStatus(bool connected);
     void onPositionReceived(const QJsonObject& json);
 
     // QML 调用此方法发送指令 (中转到 Worker)

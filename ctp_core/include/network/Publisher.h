@@ -24,6 +24,7 @@ public:
      * @brief 发送行情数据
      */
     void publishTick(const TickData& data);
+    void publishTickBinary(const TickData& data);
 
     /**
      * @brief 发送持仓数据

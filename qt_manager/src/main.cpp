@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QSettings>
 #include "network/ZmqWorker.h"
+#include "network/CommandWorker.h"
 #include "models/MarketModel.h"
 #include "models/PositionModel.h"
 #include "models/AccountInfo.h"
@@ -65,6 +66,8 @@ int main(int argc, char *argv[]) {
     font.setFamily("sans-serif");  // 跨平台默认字体
     app.setFont(font);
     
+    qRegisterMetaType<QuantLabs::TickData>("TickData");
+    
     qDebug() << "[Main] Font size:" << fontSize;
 
     QQmlApplicationEngine engine;
@@ -88,19 +91,30 @@ int main(int argc, char *argv[]) {
     
     qDebug() << "[Main] Set context properties";
 
-    // 2. 创建 ZMQ 工作线程
+// 2. 创建 ZMQ 工作线程 (Market Data)
     QThread* workerThread = new QThread();
     QuantLabs::ZmqWorker* worker = new QuantLabs::ZmqWorker();
     worker->moveToThread(workerThread);
     
-    // 连接信号
+    // 3. 创建 Command 工作线程 (REQ-REP)
+    QThread* commandThread = new QThread();
+    QuantLabs::CommandWorker* commandWorker = new QuantLabs::CommandWorker();
+    commandWorker->moveToThread(commandThread);
+
+    // 连接信号 - Market Worker
     QObject::connect(workerThread, &QThread::started, worker, &QuantLabs::ZmqWorker::process);
     
+    // 连接信号 - Command Worker
+    QObject::connect(commandThread, &QThread::started, commandWorker, &QuantLabs::CommandWorker::connectToCore);
+
     // 分发不同主题的消息
     QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceived, marketModel, &QuantLabs::MarketModel::updateTick);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceivedBinary, marketModel, &QuantLabs::MarketModel::updateTickBinary);
+
     // 行情同时也发给持仓模型计算盈亏
     QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceived, positionModel, &QuantLabs::PositionModel::updatePrice);
-    
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceivedBinary, positionModel, &QuantLabs::PositionModel::updatePriceBinary);
+
     QObject::connect(worker, &QuantLabs::ZmqWorker::positionReceived, positionModel, &QuantLabs::PositionModel::updatePosition);
     QObject::connect(worker, &QuantLabs::ZmqWorker::accountReceived, accountInfo, &QuantLabs::AccountInfo::updateAccount);
     // 连接合约信息到 MarketModel，确保订阅后能立即显示条目
@@ -114,30 +128,52 @@ int main(int argc, char *argv[]) {
     QObject::connect(worker, &QuantLabs::ZmqWorker::positionReceived, orderController, &QuantLabs::OrderController::onPositionReceived);
     
     // 连接状态更新 (Worker -> OrderController)
-    QObject::connect(worker, &QuantLabs::ZmqWorker::statusUpdated, 
-                     orderController, &QuantLabs::OrderController::updateConnectionStatus,
+    // 连接状态更新 (Separated)
+    QObject::connect(commandWorker, &QuantLabs::CommandWorker::coreStatusUpdated,
+                     orderController, &QuantLabs::OrderController::updateCoreStatus,
                      Qt::QueuedConnection);
+
+    QObject::connect(worker, &QuantLabs::ZmqWorker::ctpStatusUpdated, 
+                     orderController, &QuantLabs::OrderController::updateCtpStatus,
+                     Qt::QueuedConnection);
+
+    // 启动心跳 (跨线程调用)
+    QMetaObject::invokeMethod(commandWorker, "startHeartbeat", Qt::QueuedConnection, Q_ARG(int, 5000));
 
     // 连接行情到 OrderController 以实现自动跟价
     QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceived, orderController, &QuantLabs::OrderController::onTick);
+    QObject::connect(worker, &QuantLabs::ZmqWorker::tickReceivedBinary, orderController, &QuantLabs::OrderController::onTickBinary);
     
-    // 发送指令链路 (UI -> Controller -> ZmqWorker -> Core)
-    // 显式使用 QueuedConnection 因为 worker 在另一个线程
+    // 发送指令链路 (UI -> Controller -> CommandWorker -> Core)
+    // 显式使用 QueuedConnection (跨线程)
     bool connected = QObject::connect(orderController, &QuantLabs::OrderController::orderSent, 
-                                     worker, &QuantLabs::ZmqWorker::sendCommand, 
+                                     commandWorker, &QuantLabs::CommandWorker::sendCommand, 
                                      Qt::QueuedConnection);
-    qDebug() << "[Main] orderController.orderSent -> worker.sendCommand connection:" << (connected ? "SUCCESS" : "FAILED");
+    qDebug() << "[Main] orderController.orderSent -> commandWorker.sendCommand connection:" << (connected ? "SUCCESS" : "FAILED");
     
+    // Market Worker 需要发送指令时 (如 SYNC_STATE)，转给 Command Worker
+    QObject::connect(worker, &QuantLabs::ZmqWorker::commandRequired,
+                     commandWorker, &QuantLabs::CommandWorker::sendCommand,
+                     Qt::QueuedConnection);
+
     // 连接持仓总盈亏到资金面板
     QObject::connect(positionModel, &QuantLabs::PositionModel::totalProfitChanged, accountInfo, &QuantLabs::AccountInfo::setFloatingProfit);
     QObject::connect(worker, &QuantLabs::ZmqWorker::conditionOrderReceived, orderController, &QuantLabs::OrderController::onConditionOrderReturn);
     
+    // Cleanup Market Worker
     QObject::connect(&app, &QGuiApplication::aboutToQuit, worker, &QuantLabs::ZmqWorker::stop);
     QObject::connect(&app, &QGuiApplication::aboutToQuit, workerThread, &QThread::quit);
     QObject::connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
     QObject::connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater);
 
+    // Cleanup Command Worker
+    // CommandWorker 没有 loop，只需要 quit 线程
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, commandThread, &QThread::quit);
+    QObject::connect(commandThread, &QThread::finished, commandWorker, &QObject::deleteLater);
+    QObject::connect(commandThread, &QThread::finished, commandThread, &QObject::deleteLater);
+
     workerThread->start();
+    commandThread->start();
 
     // 3. 加载 QML
     const QUrl url(QStringLiteral("qrc:/main.qml"));

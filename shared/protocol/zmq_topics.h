@@ -10,7 +10,8 @@ namespace zmq_topics {
  */
 
 // 行情广播 (PUB/SUB)
-static constexpr const char* MARKET_DATA = "MT"; // Market Tick
+static constexpr const char* MARKET_DATA = "MD";
+static constexpr const char* MARKET_DATA_BIN = "MB"; // Market Binary
 static constexpr const char* POSITION_DATA = "PT"; // Position Tick
 static constexpr const char* ACCOUNT_DATA = "AT"; // Account Tick
 static constexpr const char* INSTRUMENT_DATA = "IT"; // Instrument Tick

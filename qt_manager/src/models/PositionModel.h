@@ -55,6 +55,7 @@ public:
 public slots:
     void updatePosition(const QJsonObject& json);
     void updatePrice(const QJsonObject& json); 
+    void updatePriceBinary(const TickData& data);
     void updateInstrument(const QJsonObject& json); 
 
 signals:

@@ -15,9 +15,10 @@ MdHandler::MdHandler(Publisher& pub, std::map<std::string, std::string> config, 
     user_id_ = config["user_id"];
     password_ = config["password"];
     md_front_ = config["md_front"];
-
+    
     std::cout << "[Md] Initializing Handler..." << std::endl;
     std::cout << "[Md] BrokerID: " << broker_id_ << ", UserID: " << user_id_ << std::endl;
+    std::cout << "[Md] Binary Tick Mode: ON (Forced)" << std::endl;
     std::cout << "[Md] Front: " << md_front_ << std::endl;
 
     // 创建流水目录: ./flow/md/BROKER_ID/USER_ID/
@@ -141,7 +142,9 @@ void MdHandler::OnRtnDepthMarketData(CThostFtdcDepthMarketDataField *pData) {
     tick.update_millisec = pData->UpdateMillisec;
 
     // std::cout << "[Md] Received tick: " << tick.instrument_id << " " << tick.last_price << " " << tick.update_time << std::endl;
-    pub_.publishTick(tick);
+    
+    // Binary Transport (High Performance)
+    pub_.publishTickBinary(tick);
 }
 
 void MdHandler::OnRspSubMarketData(CThostFtdcSpecificInstrumentField *pSpecificInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {

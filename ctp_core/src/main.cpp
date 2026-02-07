@@ -62,6 +62,8 @@ int main() {
     handler_config["user_product_info"] = ctp.value("user_product_info", "");
     handler_config["app_id"] = ctp["app_id"];
     handler_config["auth_code"] = ctp["auth_code"];
+    
+    // Binary mode is now hardcoded to ON for performance
 
     // 构造 sub_list 字符串 (兼容旧逻辑)
     std::string sub_list_str;

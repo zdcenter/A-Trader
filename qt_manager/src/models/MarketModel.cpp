@@ -344,4 +344,76 @@ QVariantMap MarketModel::getMarketData(const QString& instrumentId) const {
     return map;
 }
 
+// 二进制行情更新 (极速路径)
+void MarketModel::updateTickBinary(const TickData& data) {
+    // 1. 将 C 风格字符串转为 QString (fromLatin1 效率最高，假设ID是ASCII)
+    QString id = QString::fromLatin1(data.instrument_id);
+    
+    // 2. 查找该合约是否已存在于列表中
+    if (!_instrument_to_index.contains(id)) {
+        // [新增逻辑] 如果不存在，则插入新行
+        
+        // 通知 Qt 视图(View) 即将通过 Model 插入一行数据
+        // 参数: 父节点(无), 起始行号, 结束行号
+        beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
+        
+        // 更新索引映射: ID -> 行号
+        _instrument_to_index[id] = _market_data.count();
+        
+        MarketItem newItem;
+        newItem.data = data; // 结构体直接拷贝
+        newItem.instrumentId = id;
+        
+        // 初始化昨收价 (用于计算涨跌)
+        double basePrice = data.pre_settlement_price;
+        if (basePrice < 0.0001) basePrice = data.pre_close_price;
+        newItem.preClose = basePrice;
+        
+        // 计算涨跌额和涨跌幅 (UI 显示专用)
+        if (basePrice > 0.0001) {
+            newItem.change = data.last_price - basePrice;
+            newItem.changePercent = (newItem.change / basePrice * 100.0);
+        } else {
+            newItem.change = 0.0; newItem.changePercent = 0.0;
+        }
+        
+        newItem.updateTime = QString::fromLatin1(data.update_time);
+
+        // 添加到数据容器
+        _market_data.append(newItem);
+        
+        // 通知 Qt 视图插入完成，界面会自动刷新新增的行
+        endInsertRows();
+        return;
+    }
+
+    // [更新逻辑] 如果已存在，则更新对应行的数据
+    int row = _instrument_to_index[id];
+    auto& item = _market_data[row];
+    
+    // 3. 核心数据更新
+    // 使用结构体赋值，一次性更新所有价格/量/持仓等字段 (内存拷贝，极快)
+    item.data = data;
+    
+    // 4. 更新 UI 缓存字段
+    item.updateTime = QString::fromLatin1(data.update_time);
+    
+    double basePrice = data.pre_settlement_price;
+    if (basePrice < 0.0001) basePrice = data.pre_close_price;
+    item.preClose = basePrice;
+    
+    if (basePrice > 0.0001) {
+        item.change = data.last_price - basePrice;
+        item.changePercent = (item.change / basePrice * 100.0);
+    } else {
+        item.change = 0.0;
+        item.changePercent = 0.0;
+    }
+    
+    // 5. 触发信号通知界面重绘
+    // index(row) 生成对应行的 QModelIndex
+    // dataChanged 告诉 TableView 这一行的数据变了，需要重新读取 roleNames() 绑定的字段
+    emit dataChanged(index(row), index(row));
+}
+
 } // namespace QuantLabs

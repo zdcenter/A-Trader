@@ -259,6 +259,39 @@ void PositionModel::updatePrice(const QJsonObject& j) {
     } catch (...) {}
 }
 
+void PositionModel::updatePriceBinary(const TickData& data) {
+    QString id = QString::fromLatin1(data.instrument_id);
+    if (!_instrument_to_indices.contains(id)) return;
+    
+    for (int row : _instrument_to_indices[id]) {
+        if (row < 0 || row >= _position_data.size()) continue;
+        
+        PositionItem& item = _position_data[row];
+        item.lastPrice = data.last_price;
+        item.bidPrice1 = data.bid_price1;
+        item.askPrice1 = data.ask_price1;
+        item.upperLimit = data.upper_limit_price;
+        item.lowerLimit = data.lower_limit_price;
+        
+        if (_instrument_dict.contains(id)) {
+            item.priceTick = _instrument_dict[id].price_tick;
+        }
+        
+        calculateProfit(item);
+        emit dataChanged(index(row), index(row), {ProfitRole, CostRole, LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
+    }
+
+    double newTotal = 0.0;
+    for (const auto& item : _position_data) {
+        newTotal += item.profit;
+    }
+    
+    if (std::abs(newTotal - _total_profit) > 0.01) {
+        _total_profit = newTotal;
+        emit totalProfitChanged(_total_profit);
+    }
+}
+
 void PositionModel::updateInstrument(const QJsonObject& j) {
     try {
         QString id;

@@ -58,10 +58,14 @@ void Publisher::publishTick(const TickData& data) {
         data.update_time, data.update_millisec
     );
 
-    if (len > 0) {
-        publisher_->send(zmq::message_t(zmq_topics::MARKET_DATA, 2), zmq::send_flags::sndmore);
-        publisher_->send(zmq::message_t(buffer, len), zmq::send_flags::none);
-    }
+}
+
+void Publisher::publishTickBinary(const TickData& data) {
+    publisher_->send(zmq::message_t(zmq_topics::MARKET_DATA_BIN, 2), zmq::send_flags::sndmore);
+    
+    zmq::message_t msg(sizeof(TickData));
+    std::memcpy(msg.data(), &data, sizeof(TickData));
+    publisher_->send(msg, zmq::send_flags::none);
 }
 
 void Publisher::publishPosition(const PositionData& data, int64_t snapshot_seq) {

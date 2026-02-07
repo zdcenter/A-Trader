@@ -1,50 +1,4 @@
 Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/UFQQIFJZKK/moc_ZmqWorker.cpp: Z:/qt_manager/src/network/ZmqWorker.h \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/adl_serializer.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/byte_container_with_subtype.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/abi_macros.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/conversions/from_json.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/conversions/to_chars.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/conversions/to_json.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/exceptions.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/hash.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/input/binary_reader.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/input/input_adapters.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/input/json_sax.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/input/lexer.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/input/parser.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/input/position_t.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/iterators/internal_iterator.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/iterators/iter_impl.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/iterators/iteration_proxy.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/iterators/iterator_traits.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/iterators/json_reverse_iterator.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/iterators/primitive_iterator.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/json_custom_base_class.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/json_pointer.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/json_ref.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/macro_scope.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/macro_unscope.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/call_std/begin.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/call_std/end.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/cpp_future.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/detected.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/identity_tag.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/is_sax.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/std_fs.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/type_traits.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/meta/void_t.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/output/binary_writer.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/output/output_adapters.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/output/serializer.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/string_concat.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/string_escape.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/string_utils.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/detail/value_t.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/json.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/json_fwd.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/ordered_map.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/thirdparty/hedley/hedley.hpp \
-  C:/vcpkg/installed/x64-windows/include/nlohmann/thirdparty/hedley/hedley_undef.hpp \
   C:/vcpkg/installed/x64-windows/include/zmq.h \
   C:/vcpkg/installed/x64-windows/include/zmq.hpp \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/QJsonDocument \
@@ -184,4 +138,5 @@ Z:/qt_manager/build-windows/qt_manager_autogen/include_Release/UFQQIFJZKK/moc_Zm
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qvarlengtharray.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qversiontagging.h \
   D:/Qt/6.10.2/msvc2022_64/include/QtCore/qxptype_traits.h \
-  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qyieldcpu.h
+  D:/Qt/6.10.2/msvc2022_64/include/QtCore/qyieldcpu.h \
+  Z:/shared/protocol/message_schema.h

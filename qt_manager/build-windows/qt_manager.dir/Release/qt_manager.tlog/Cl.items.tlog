@@ -1,5 +1,6 @@
 Z:\qt_manager\src\main.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\main.obj
 Z:\qt_manager\src\network\ZmqWorker.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\ZmqWorker.obj
+Z:\qt_manager\src\network\CommandWorker.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\CommandWorker.obj
 Z:\qt_manager\src\models\MarketModel.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\MarketModel.obj
 Z:\qt_manager\src\models\PositionModel.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\PositionModel.obj
 Z:\qt_manager\src\models\AccountInfo.cpp;Z:\qt_manager\build-windows\qt_manager.dir\Release\AccountInfo.obj

@@ -10,6 +10,9 @@
     <ClCompile Include="Z:\qt_manager\src\network\ZmqWorker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Z:\qt_manager\src\network\CommandWorker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Z:\qt_manager\src\models\MarketModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -53,7 +56,7 @@
     <Natvis Include="C:\vcpkg\installed\x64-windows\share\nlohmann_json\nlohmann_json.natvis" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Z:\qt_manager\resources\app_icon.rc">
+    <ResourceCompile Include="Z:\qt_manager\build-windows\app_icon.rc">
       <Filter>Source Files</Filter>
     </ResourceCompile>
   </ItemGroup>

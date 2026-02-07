@@ -6,6 +6,7 @@
 #include <QThread>
 #include <QString>
 #include <zmq.hpp>
+#include "protocol/message_schema.h"
 
 
 namespace QuantLabs {
@@ -23,10 +24,7 @@ public slots:
     void process();
     void stop();
 
-    /**
-     * @brief 向 Core 发送同步指令 (下单/订阅等)
-     */
-    void sendCommand(const QString& json);
+
 
 signals:
     /**
@@ -36,6 +34,7 @@ signals:
      * @brief 收到新的行情 JSON 时触发
      */
     void tickReceived(const QJsonObject& json);
+    void tickReceivedBinary(const TickData& data);
 
     /**
      * @brief 收到持仓 JSON 时触发
@@ -57,11 +56,14 @@ signals:
     void conditionOrderReceived(const QJsonObject& json); // Added for Strategy Push
     
     /**
-     * @brief 状态更新信号
-     * @param core Core是否连接
-     * @param ctp CTP是否连接（有行情活动）
+     * @brief CTP 行情连接状态更新 (基于是否有行情数据推送)
      */
-    void statusUpdated(bool core, bool ctp);
+    void ctpStatusUpdated(bool connected);
+    
+    /**
+     * @brief 请求发送指令（由 CommandWorker 处理）
+     */
+    void commandRequired(const QString& json);
 
 private:
     bool _running = false;

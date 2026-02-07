@@ -12,7 +12,7 @@
 
 | Topic String | 常量名 (`zmq_topics`) | 用途 | 数据结构示例 |
 | :--- | :--- | :--- | :--- |
-| **MD** | `MARKET_DATA` | 实时行情 | `{"instrument_id":"rb2505","last_price":3600,...}` |
+| **MD_BIN** | `MARKET_DATA_BIN` | 实时行情 (Binary Only) | `struct TickData` |
 | **POS** | `POSITION_DATA` | 持仓更新 | `{"instrument_id":"rb2505","direction":"0","position":5,...}` |
 | **ORD** | `ORDER_DATA` | 委托回报 | `{"order_sys_id":"123","status":"0",...}` |
 | **TRD** | `TRADE_DATA` | 成交回报 | `{"trade_id":"T001","price":3600,...}` |

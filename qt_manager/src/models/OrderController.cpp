@@ -71,6 +71,35 @@ void OrderController::onTick(const QJsonObject& j) {
     } catch (...) {}
 }
 
+void OrderController::onTickBinary(const TickData& data) {
+    if (_instrumentId.isEmpty()) return;
+    
+    // Check if ID matches
+    if (QString::fromLatin1(data.instrument_id) != _instrumentId) return;
+    
+    // Auto Price update
+    if (!_isManualPrice) {
+        if (data.last_price > 0.0001 && std::abs(_price - data.last_price) > 0.0001) {
+            _price = data.last_price;
+            emit orderParamsChanged();
+        }
+    }
+    
+    // Market Depth Refresh
+    QVariantList newBids, newBidVols, newAsks, newAskVols;
+    
+    newBids << data.bid_price1 << data.bid_price2 << data.bid_price3 << data.bid_price4 << data.bid_price5;
+    newBidVols << data.bid_volume1 << data.bid_volume2 << data.bid_volume3 << data.bid_volume4 << data.bid_volume5;
+    
+    newAsks << data.ask_price1 << data.ask_price2 << data.ask_price3 << data.ask_price4 << data.ask_price5;
+    newAskVols << data.ask_volume1 << data.ask_volume2 << data.ask_volume3 << data.ask_volume4 << data.ask_volume5;
+    
+    _bidPrices = newBids; _bidVolumes = newBidVols;
+    _askPrices = newAsks; _askVolumes = newAskVols;
+    
+    emit marketDataChanged();
+}
+
 void OrderController::updateInstrument(const QJsonObject& j) {
     try {
         QString idStr;
@@ -511,17 +540,32 @@ void OrderController::onConditionOrderReturn(const QJsonObject& j) {
 
 void OrderController::updateConnectionStatus(bool core, bool ctp) {
     if (_coreConnected != core || _ctpConnected != ctp) {
+        bool prevCore = _coreConnected;
         _coreConnected = core;
         _ctpConnected = ctp;
         emit connectionChanged();
         
-        if (core) {
+        if (core && !prevCore) {
             _conditionOrderList.clear();
             emit conditionOrderListChanged();
             queryConditionOrders();
             queryStrategies(); // Added
+            
+            // Core Connected also implies ZMQ Req is available.
+            // We can send initial sync if not done?
+            // ZmqWorker used to send SYNC_STATE.
+            // Now CommandWorker does it? Or we trigger it here?
+            sendCommand("{\"type\":\"SYNC_STATE\"}");
         }
     }
+}
+
+void OrderController::updateCoreStatus(bool connected) {
+    updateConnectionStatus(connected, _ctpConnected);
+}
+
+void OrderController::updateCtpStatus(bool connected) {
+    updateConnectionStatus(_coreConnected, connected);
 }
 
 

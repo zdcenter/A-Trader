@@ -5,4 +5,5 @@
 #include <M4YTXQ7V2H/moc_OrderModel.cpp>
 #include <M4YTXQ7V2H/moc_PositionModel.cpp>
 #include <M4YTXQ7V2H/moc_TradeModel.cpp>
+#include <UFQQIFJZKK/moc_CommandWorker.cpp>
 #include <UFQQIFJZKK/moc_ZmqWorker.cpp>

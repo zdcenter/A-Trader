@@ -54,12 +54,20 @@ qt_add_resources(RESOURCES qml/qml.qrc resources/resources.qrc)
 
 set(APP_ICON_RESOURCE "")
 if(WIN32)
-    set(APP_ICON_RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.rc")
+    # 1. Copy icon to build dir to avoid path issues
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.ico" 
+                   "${CMAKE_CURRENT_BINARY_DIR}/app_icon.ico" COPYONLY)
+
+    # 2. Generate RC file in build dir referencing local icon
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc" "1 ICON \"app_icon.ico\"")
+    
+    set(APP_ICON_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc")
 endif()
 
 add_executable(${PROJECT_NAME} WIN32
     src/main.cpp
     src/network/ZmqWorker.cpp
+    src/network/CommandWorker.cpp
     src/models/MarketModel.cpp
     src/models/PositionModel.cpp
     src/models/AccountInfo.cpp
