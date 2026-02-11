@@ -124,9 +124,16 @@ void TraderHandler::confirmSettlement() {
 
 void TraderHandler::OnRspSettlementInfoConfirm(CThostFtdcSettlementInfoConfirmField *pConfirm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
     if (pRspInfo && pRspInfo->ErrorID == 0) {
-        std::cout << "[Td] Settlement Confirmed. Querying Account & Position..." << std::endl;
-        qryAccount();
+        std::cout << "[Td] Settlement Confirmed. Querying ALL Instruments..." << std::endl;
+        qryAllInstruments(); // Chain start: All Instruments -> Account -> Position
     }
+}
+
+void TraderHandler::qryAllInstruments() {
+    CThostFtdcQryInstrumentField req;
+    std::memset(&req, 0, sizeof(req));
+    // Empty InstrumentID means ALL
+    td_api_->ReqQryInstrument(&req, 0);
 }
 
 void TraderHandler::qryAccount() {
@@ -288,6 +295,10 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
         std::strncpy(data.trading_day, current_trading_day_.c_str(), sizeof(data.trading_day) - 1);
         
         std::cout << "[Td] Saved Instrument: " << data.instrument_id << " (" << data.instrument_name << ")" << std::endl;
+        
+        // --- PositionManager Integration ---
+        m_posManager.UpdateInstrument(*pInstrument);
+        // -----------------------------------
 
         // 1. 保存到数据库 (全量保存)
         DBManager::instance().saveInstrument(data);
@@ -297,6 +308,13 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
     } else {
         // pInstrument is null
          std::cout << "[Td Warn] OnRspQryInstrument received NULL data." << std::endl;
+    }
+
+    // Chain execution: when ALL instruments are loaded, query Account
+    if (bIsLast) {
+        std::cout << "[Td] All Instruments Loaded (" << instrument_cache_.size() << "). Querying Account..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Brief pause
+        qryAccount();
     }
 }
 
@@ -465,6 +483,33 @@ void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDet
             std::cout << "[Td Detail] Loaded Pos: " << item.instrument_id << " Dir:" << (int)item.direction 
                       << " Price:" << item.open_price << " Vol:" << item.volume 
                       << " Date:" << item.open_date << std::endl;
+
+            // --- PositionManager Integration ---
+            // Construct a synthetic TradeField to feed into PositionManager
+            CThostFtdcTradeField trade = {0};
+            std::strncpy(trade.InstrumentID, pDetail->InstrumentID, sizeof(trade.InstrumentID));
+            std::strncpy(trade.ExchangeID, pDetail->ExchangeID, sizeof(trade.ExchangeID));
+            std::strncpy(trade.TradeID, pDetail->TradeID, sizeof(trade.TradeID));
+            std::strncpy(trade.TradeDate, pDetail->OpenDate, sizeof(trade.TradeDate));
+            trade.Price = pDetail->OpenPrice;
+            trade.Volume = pDetail->Volume;
+            // Direction in Detail: Buy=Long, Sell=Short
+            // Direction in Trade: 0=Buy, 1=Sell
+            // Need to map carefully:
+            // If Detail Dir is '2'(Long), it means we Bought (0).
+            // If Detail Dir is '3'(Short), it means we Sold (1).
+            // Wait, CTP Detail Direction is char: '2' for Long, '3' for Short
+            // CTP Trade Direction is char: '0' for Buy, '1' for Sell
+            if (pDetail->Direction == THOST_FTDC_PD_Long) { //'2'
+                 trade.Direction = THOST_FTDC_D_Buy; //'0'
+            } else {
+                 trade.Direction = THOST_FTDC_D_Sell; //'1'
+            }
+            trade.OffsetFlag = THOST_FTDC_OF_Open; // All existing positions were once Opens
+            
+            // Push to Manager
+            m_posManager.UpdateFromTrade(trade);
+            // -----------------------------------
         }
     }
 
@@ -781,6 +826,10 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
     if (pTrade) {
         std::cout << "[Td] Trade Update: " << pTrade->TradeID << " Price: " << pTrade->Price << std::endl;
         
+        // --- PositionManager Integration ---
+        m_posManager.UpdateFromTrade(*pTrade);
+        // -----------------------------------
+
         // 查找 strategy_id
         std::string strategy_id;
         {
@@ -1105,6 +1154,26 @@ void TraderHandler::loadInstrumentsFromDB() {
         }
     }
     std::cout << "[Td] Loaded " << instrs.size() << " instruments from DB. Valid for Today:" << count << std::endl;
+    
+    // --- PositionManager Init from Cache ---
+    for (const auto& i : instrs) {
+         CThostFtdcInstrumentField instr = {0};
+         std::strncpy(instr.InstrumentID, i.instrument_id, sizeof(instr.InstrumentID));
+         std::strncpy(instr.ExchangeID, i.exchange_id, sizeof(instr.ExchangeID));
+         instr.VolumeMultiple = i.volume_multiple;
+         instr.PriceTick = i.price_tick;
+         // Assume cache is good enough for PositionDateType or infer it
+         // Ideally DB should store PositionDateType but we don't have it yet in struct
+         // Can infer from ExchangeID
+         if (std::string(i.exchange_id) == "SHFE" || std::string(i.exchange_id) == "INE") {
+             instr.PositionDateType = THOST_FTDC_PDT_UseHistory; 
+         } else {
+             instr.PositionDateType = THOST_FTDC_PDT_NoUseHistory;
+         }
+         
+         m_posManager.UpdateInstrument(instr);
+    }
+    // ---------------------------------------
     
     // 改为查 CTP 持仓明细来初始化 FIFO 队列 (准确且高效)
     qryPositionDetail();

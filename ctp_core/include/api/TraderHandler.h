@@ -1,5 +1,7 @@
 #pragma once
 
+#include "position/PositionManager.h"
+
 #include "ThostFtdcTraderApi.h"
 #include "protocol/message_schema.h"
 #include <atomic>
@@ -25,6 +27,8 @@ namespace QuantLabs {
 
 class Publisher;
 
+using atrader::core::PositionManager;
+
 class TraderHandler : public CThostFtdcTraderSpi {
 public:
     explicit TraderHandler(std::map<std::string, std::string> config, Publisher& pub);
@@ -35,11 +39,15 @@ public:
     void auth();
     void confirmSettlement();
     void join();
+    
+    // Core functionality utilizing PositionManager
+    PositionManager& getPositionManager() { return m_posManager; }
 
     // 查询接口
     void qryAccount();
     void qryPosition();
     void qryInstrument(const std::string& instrument_id);
+    void qryAllInstruments(); // 全量查询合约
     void qryMarginRate(const std::string& instrument_id);
     void qryCommissionRate(const std::string& instrument_id);
     void qryPositionDetail(); // 查询持仓明细（用于FIFO匹配）
@@ -83,6 +91,9 @@ private:
     void queryLoop();
     void updateLocalPosition(CThostFtdcTradeField *pTrade);
     void updateLocalAccount(CThostFtdcTradeField *pTrade);
+    
+    // New: Position Manager
+    PositionManager m_posManager;
 
     CThostFtdcTraderApi* td_api_ = nullptr;
     Publisher& pub_;
