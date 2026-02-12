@@ -160,9 +160,9 @@ void ConditionEngine::executeOrder(ConditionOrderRequest& order, const CThostFtd
     if (status_callback_) status_callback_(order);
     
     // 1. Get PriceTick
-    InstrumentData instr_data;
+    InstrumentMeta instr_data;
     double price_tick = 1.0; 
-    if (trader_.getInstrumentData(order.instrument_id, instr_data)) {
+    if (trader_.getInstrumentMeta(order.instrument_id, instr_data)) {
         price_tick = instr_data.price_tick;
     }
     if (price_tick < 1e-6) price_tick = 1.0; // Fallback

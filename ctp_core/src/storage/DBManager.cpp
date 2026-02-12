@@ -75,7 +75,7 @@ void DBManager::removeSubscription(const std::string& instrumentId) {
     }
 }
 
-void DBManager::saveInstrument(const InstrumentData& data) {
+void DBManager::saveInstrument(const InstrumentMeta& data) {
     std::lock_guard<std::mutex> lock(queueMutex_);
     if (tasks_.size() > 5000) return; // 防止积压
     DBTask task;
@@ -241,8 +241,8 @@ std::vector<std::pair<std::string, std::string>> DBManager::loadStrategies() {
     return strategies;
 }
 
-std::vector<InstrumentData> DBManager::loadAllInstruments() {
-    std::vector<InstrumentData> instruments;
+std::vector<InstrumentMeta> DBManager::loadAllInstruments() {
+    std::vector<InstrumentMeta> instruments;
     if (connStr_.empty()) return instruments;
     try {
         pqxx::connection c(connStr_);
@@ -264,7 +264,7 @@ std::vector<InstrumentData> DBManager::loadAllInstruments() {
         );
         
         for (auto row : r) {
-            InstrumentData data;
+            InstrumentMeta data;
             std::memset(&data, 0, sizeof(data));
             
             std::string s;

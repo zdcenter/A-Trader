@@ -35,8 +35,8 @@ public:
     virtual ~TraderHandler();
 
     void connect();
-    void login();
-    void auth();
+    void reqUserLogin();
+    void reqAuthenticate();
     void confirmSettlement();
     void join();
     
@@ -120,14 +120,15 @@ private:
     char cached_ref_prefix_[10] = {0};  // 缓存的 "DDHHMMSS" 字符串
 
     // 缓存 (恢复)
-    std::map<std::string, InstrumentData> instrument_cache_;
-    std::map<std::string, PositionData> position_cache_;
-    std::mutex position_mtx_; // Protected position_cache_
+    std::map<std::string, InstrumentMeta> instrument_cache_;
+    // std::map<std::string, PositionData> position_cache_; // REMOVED: Replaced by PositionManager
+    // std::mutex position_mtx_; // REMOVED
     AccountData account_cache_;
 
     // 查询队列 (线程安全)
     std::deque<std::string> high_priority_queue_; // Subscribed / Positions
     std::deque<std::string> low_priority_queue_;  // Others (if needed)
+    // 去重
     std::unordered_set<std::string> queried_set_; // Avoid dup query in session
     std::mutex queue_mtx_;
     std::condition_variable queue_cv_;
@@ -163,13 +164,12 @@ public:
     void syncSubscribedInstruments(); // Added
 
     // Helper for Strategy
-    bool getInstrumentData(const std::string& id, InstrumentData& out_data);
+    bool getInstrumentMeta(const std::string& id, InstrumentMeta& out_data);
 
 private:
     // 开仓明细队列 (使用共享结构，便于后续可能的前端展示)
     // Key: InstrumentID_Direction (e.g. "rb2505_0" for Long, "rb2505_1" for Short)
-    std::map<std::string, std::deque<PositionDetailData>> open_position_queues_;
-    std::mutex position_detail_mtx_;
+    // 开仓明细队列及同步锁已移除 (Refactored to PositionManager)
 };
 
 } // namespace QuantLabs

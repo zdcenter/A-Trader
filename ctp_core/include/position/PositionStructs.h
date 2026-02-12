@@ -5,10 +5,10 @@
 #include <vector>
 #include <mutex>
 
-// 适配A-Trader，不直接依赖CTP头文件，使用前向声明
-// 或者根据A-Trader的工程习惯，包含ThostFtdcUserApiDataType.h
-#include "../lib/ThostFtdcUserApiDataType.h"
-#include "../lib/ThostFtdcUserApiStruct.h"
+// 适配A-Trader，直接使用文件名，依赖 CMake 的 include_directories
+#include "ThostFtdcUserApiDataType.h"
+#include "ThostFtdcUserApiStruct.h"
+#include "../../shared/protocol/message_schema.h"
 
 namespace atrader {
 namespace core {
@@ -74,15 +74,15 @@ struct InstrumentPosition {
  * @brief 合约元数据缓存
  * 用于判断交易所规则 (如是否区分今昨仓)
  */
-struct InstrumentMeta {
-    std::string InstrumentID;
-    std::string ExchangeID;
-    double VolumeMultiple;      // 合约乘数
-    double PriceTick;           // 最小变动价位
-    char PositionDateType;      // 持仓日期类型: '1' 使用历史; '2' 不使用
-                                // THOST_FTDC_PDT_UseHistory ('1'): SHFE/INE 模式
-                                // THOST_FTDC_PDT_NoUseHistory ('2'): DCE/CZCE/CFFEX 模式
-};
+// Include message_schema.h for unified InstrumentMeta definition
+// Include message_schema.h moved to top
+// #include "../../shared/protocol/message_schema.h"
+
+// Re-export QuantLabs::InstrumentMeta into atrader::core namespace for compatibility
+using InstrumentMeta = QuantLabs::InstrumentMeta;
+
+// REMOVED: Local InstrumentMeta definition
+// struct InstrumentMeta { ... };
 
 } // namespace core
 } // namespace atrader

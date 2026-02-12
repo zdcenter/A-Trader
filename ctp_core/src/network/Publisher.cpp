@@ -100,7 +100,7 @@ void Publisher::publishAccount(const AccountData& data) {
     publisher_->send(zmq::message_t(payload.data(), payload.size()), zmq::send_flags::none);
 }
 
-void Publisher::publishInstrument(const InstrumentData& data) {
+void Publisher::publishInstrument(const InstrumentMeta& data) {
     nlohmann::json j;
     j["instrument_id"] = data.instrument_id;
     j["instrument_name"] = QuantLabs::utils::gbk_to_utf8(data.instrument_name);

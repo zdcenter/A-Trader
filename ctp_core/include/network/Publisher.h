@@ -36,7 +36,7 @@ public:
     /**
      * @brief 发送合约基础信息
      */
-    void publishInstrument(const InstrumentData& data);
+    void publishInstrument(const InstrumentMeta& data);
 
     /**
      * @brief 发送账户资金数据

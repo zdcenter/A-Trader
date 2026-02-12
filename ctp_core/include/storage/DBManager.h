@@ -34,7 +34,7 @@ struct DBTask {
     // We store copies of data.
     // Use std::variant or simple union or shared_ptr to struct?
     // Let's use specific structs for simplicity.
-    InstrumentData instr;
+    InstrumentMeta instr;
     CThostFtdcOrderField order;
     CThostFtdcTradeField trade;
     double commission = 0.0; // Added for Trade
@@ -61,9 +61,9 @@ public:
     void removeSubscription(const std::string& instrumentId);
 
     // 加载缓存的合约信息
-    std::vector<InstrumentData> loadAllInstruments();
+    std::vector<InstrumentMeta> loadAllInstruments();
 
-    void saveInstrument(const InstrumentData& data);
+    void saveInstrument(const InstrumentMeta& data);
     void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "");
     void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "", double commission = 0.0, double close_profit = 0.0);
     void saveConditionOrder(const ConditionOrderRequest& order); // Added

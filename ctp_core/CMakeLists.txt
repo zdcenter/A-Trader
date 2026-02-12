@@ -59,6 +59,7 @@ add_executable(${PROJECT_NAME}
     src/api/TraderHandler.cpp
     src/strategy/ConditionEngine.cpp # Added
     src/storage/DBManager.cpp # Added
+    src/position/PositionManager.cpp # Added
 )
 
 # 复制 config.json 到构建目录

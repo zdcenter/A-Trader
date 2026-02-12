@@ -73,21 +73,7 @@ struct PositionData {
 };
 
 // 逐笔持仓明细数据 (对应 CThostFtdcInvestorPositionDetailField)
-struct PositionDetailData {
-    char trade_id[64];           // 原始开仓成交号
-    char instrument_id[64];      // 合约代码
-    char exchange_id[16];        // 交易所代码
-    char direction;              // 持仓方向: '0' Buy/Long, '1' Sell/Short
-    double open_price;           // 开仓价格
-    int volume;                  // 剩余持仓量
-    char open_date[16];          // 开仓日期
-    double margin;               // 占用保证金
-    double settlement_price;     // 昨结算价 (用于计算逐日盯市盈亏)
-    double close_profit_by_date; // 逐日盯市平仓盈亏
-    double close_profit_by_trade;// 逐笔对冲平仓盈亏
-    double position_profit_by_date;  // 逐日盯市持仓盈亏
-    double position_profit_by_trade; // 逐笔对冲持仓盈亏
-};
+// PositionDetailData removed as per request (Legacy detail tracking)
 
 // 成交数据 (扩展版，包含 CTP 原始数据 + 分析数据)
 struct TradeData {
@@ -120,10 +106,10 @@ struct AccountData {
     double close_profit;   // 平仓盈亏
 };
 
-// 合约属性数据
-struct InstrumentData {
+// 合约属性数据 (Refactored to InstrumentMeta)
+struct InstrumentMeta {
     char instrument_id[64];
-    char instrument_name[64]; // Added
+    char instrument_name[64]; 
     char exchange_id[16];
     char product_id[16];            // 品种ID
     char underlying_instr_id[64];   // 标的合约ID
@@ -131,6 +117,9 @@ struct InstrumentData {
     
     int volume_multiple;   // 合约乘数
     double price_tick;     // 最小变动价位
+
+    // 持仓日期类型
+    char position_date_type; // '1': SHFE/INE (UseHistory), '2': Others (NoUseHistory)
 
     // 保证金率
     double long_margin_ratio_by_money;
