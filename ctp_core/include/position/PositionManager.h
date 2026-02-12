@@ -17,7 +17,8 @@ public:
     // 更新逻辑
     double UpdateFromTrade(const CThostFtdcTradeField& trade);
     void UpdateInstrument(const CThostFtdcInstrumentField& instrument);
-    void UpdateInstrumentMeta(const InstrumentMeta& meta); // 新增：更新完整元数据(含费率)
+    void UpdateInstrumentMeta(const InstrumentMeta& meta);
+    void SetTradingDay(const std::string& day) { trading_day_ = day; }
 
     // 查询接口
     std::shared_ptr<InstrumentPosition> GetPosition(const std::string& instrumentID);
@@ -27,6 +28,7 @@ public:
 private:
     std::unordered_map<std::string, std::shared_ptr<InstrumentPosition>> positions_;
     std::unordered_map<std::string, InstrumentMeta> instruments_meta_;
+    std::string trading_day_;   // 当前交易日 (判断 OpenDetail 是否今仓)
     std::mutex m_mutex; 
 };
 

@@ -93,6 +93,7 @@ void TraderHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, C
         current_trading_day_ = pRspUserLogin->TradingDay;
         std::cout << "[Td] Login Success. Day:" << current_trading_day_ << " Confirming..." << std::endl;
         
+        m_posManager.SetTradingDay(current_trading_day_);
         loadInstrumentsFromDB();
         syncSubscribedInstruments();
 
@@ -124,21 +125,20 @@ void TraderHandler::confirmSettlement() {
 
 void TraderHandler::OnRspSettlementInfoConfirm(CThostFtdcSettlementInfoConfirmField *pConfirm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
     if (pRspInfo && pRspInfo->ErrorID == 0) {
-        if (!instrument_cache_.empty()) {
-             std::cout << "[Td] Settlement Confirmed. Instruments cached (" << instrument_cache_.size() << "). Skipping heavy query. Querying Account..." << std::endl;
-             qryAccount();
-        } else {
-             std::cout << "[Td] Settlement Confirmed. Querying ALL Instruments..." << std::endl;
-             qryAllInstruments(); 
-        }
+        std::cout << "[Td] Settlement Confirmed. Waiting 1s before QryInstrument (flow control)..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        qryAllInstruments(); 
     }
+ 
 }
 
 void TraderHandler::qryAllInstruments() {
     CThostFtdcQryInstrumentField req;
     std::memset(&req, 0, sizeof(req));
     // Empty InstrumentID means ALL
-    td_api_->ReqQryInstrument(&req, 0);
+    int ret = td_api_->ReqQryInstrument(&req, 0);
+    std::cout << "[Td] ReqQryInstrument ret=" << ret 
+              << " (0=OK, -1=Network, -2=Pending, -3=FlowControl)" << std::endl;
 }
 
 void TraderHandler::qryInstrument(const std::string& instrument_id) {
@@ -155,53 +155,29 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
     }
 
     if (pInstrument) {
-        // [Debug] 打印每一个收到的合约，看看 ru2605 是否出现以及属性是什么
-        // std::cout << "[Td Debug] Recv Instrument: " << pInstrument->InstrumentID 
-        //           << " Class:" << pInstrument->ProductClass << std::endl;
-
         // 只处理期货 (ProductClass == '1')
-        // 增加日志：如果是因为类型不对被过滤，打印出来
-        if (pInstrument->ProductClass != THOST_FTDC_PC_Futures) {
-            //  std::cout << "[Td Warn] Filtered Instrument (Not Future): " << pInstrument->InstrumentID 
-            //            << " Class: " << pInstrument->ProductClass << std::endl;
-            // 恢复过滤：只保留期货，过滤掉期权(2)等其他类型
-            return; 
-        }
+        // 注意：不能用 return 过滤！否则最后一条如果是期权，bIsLast 检查会被跳过
+        if (pInstrument->ProductClass == THOST_FTDC_PC_Futures) {
 
-        InstrumentMeta& data = instrument_cache_[pInstrument->InstrumentID];
-        std::strncpy(data.instrument_id, pInstrument->InstrumentID, sizeof(data.instrument_id));
-        std::strncpy(data.exchange_id, pInstrument->ExchangeID, sizeof(data.exchange_id));
-        
-        // 记得加上 InstrumentName!
-        std::strncpy(data.instrument_name, pInstrument->InstrumentName, sizeof(data.instrument_name));
-        
-        std::strncpy(data.product_id, pInstrument->ProductID, sizeof(data.product_id));
-        std::strncpy(data.underlying_instr_id, pInstrument->UnderlyingInstrID, sizeof(data.underlying_instr_id));
-        data.strike_price = pInstrument->StrikePrice;
-        
-        // 合约乘数和最小变动价位
-        data.volume_multiple = pInstrument->VolumeMultiple;
-        data.price_tick = pInstrument->PriceTick;
-
-        // Mark Trading Day
-        std::strncpy(data.trading_day, current_trading_day_.c_str(), sizeof(data.trading_day) - 1);
+            InstrumentMeta& data = instrument_cache_[pInstrument->InstrumentID];
+            std::strncpy(data.instrument_id, pInstrument->InstrumentID, sizeof(data.instrument_id));
+            std::strncpy(data.exchange_id, pInstrument->ExchangeID, sizeof(data.exchange_id));
+            std::strncpy(data.instrument_name, pInstrument->InstrumentName, sizeof(data.instrument_name));
+            std::strncpy(data.product_id, pInstrument->ProductID, sizeof(data.product_id));
+            std::strncpy(data.underlying_instr_id, pInstrument->UnderlyingInstrID, sizeof(data.underlying_instr_id));
+            data.strike_price = pInstrument->StrikePrice;
+            data.volume_multiple = pInstrument->VolumeMultiple;
+            data.price_tick = pInstrument->PriceTick;
+            std::strncpy(data.trading_day, current_trading_day_.c_str(), sizeof(data.trading_day) - 1);
 
 #ifdef _DEBUG        
-        std::cout << "[Td] Saved Instrument: " << data.instrument_id << " (" << data.instrument_name << ")" << std::endl;
+            std::cout << "[Td] Saved Instrument: " << data.instrument_id << " (" << data.instrument_name << ")" << std::endl;
 #endif  
-
-        // --- PositionManager Integration ---
-        m_posManager.UpdateInstrument(*pInstrument);
-        // -----------------------------------
-
-        // 1. 保存到数据库 (全量保存)
-        DBManager::instance().saveInstrument(data);
-
-        // 2. 直接推送到前端 (不再需要白名单，因为我们只查关注的)
-        pub_.publishInstrument(data);
-    } else {
-        // pInstrument is null
-         std::cout << "[Td Warn] OnRspQryInstrument received NULL data." << std::endl;
+            m_posManager.UpdateInstrument(*pInstrument);
+            DBManager::instance().saveInstrument(data);
+            pub_.publishInstrument(data);
+        }
+        // 非期货合约：静默跳过，不 return，让 bIsLast 正常检查
     }
 
     // Chain execution: when ALL instruments are loaded, query Account
@@ -531,23 +507,8 @@ void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDet
             }
             trade.OffsetFlag = THOST_FTDC_OF_Open; 
             
-            // Push to Manager
+            // Push to Manager (FIFO 队列会自动根据 trading_day_ 判断今/昨仓)
             m_posManager.UpdateFromTrade(trade);
-            
-            // Fix history positions (since UpdateFromTrade treats everything as Today)
-            if (std::string(pDetail->OpenDate) != current_trading_day_) {
-                 auto pos = m_posManager.GetPosition(trade.InstrumentID);
-                 if (pos) {
-                     if (trade.Direction == THOST_FTDC_D_Buy) {
-                         // Move volume from Today to Yd
-                         pos->LongTodayPosition -= trade.Volume;
-                         pos->LongYdPosition += trade.Volume;
-                     } else {
-                         pos->ShortTodayPosition -= trade.Volume;
-                         pos->ShortYdPosition += trade.Volume;
-                     }
-                 }
-            }
             // -----------------------------------
         }
     }
@@ -1045,9 +1006,6 @@ void TraderHandler::loadInstrumentsFromDB() {
          m_posManager.UpdateInstrument(instr);
     }
     // ---------------------------------------
-    
-    // 改为查 CTP 持仓明细来初始化 FIFO 队列 (准确且高效)
-    qryPositionDetail();
 }
 
 void TraderHandler::loadDayOrdersFromDB() {

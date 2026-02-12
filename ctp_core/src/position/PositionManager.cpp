@@ -51,7 +51,13 @@ void PositionManager::Clear() {
 }
 
 /**
- * @brief 核心持仓更新逻辑 (基于简单的聚合结构)
+ * @brief 核心持仓更新逻辑 (FIFO 逐笔盈亏)
+ * 
+ * 开仓: 创建 OpenDetail 入队
+ * 平仓: 从队头按 FIFO 逐笔扣减，用每笔实际开仓价计算盈亏
+ *        SHFE/INE 平今/平昨会精确匹配 is_today 标记
+ * 
+ * @return 本次平仓的实现盈亏 (开仓返回 0)
  */
 double PositionManager::UpdateFromTrade(const CThostFtdcTradeField& trade) {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -66,123 +72,157 @@ double PositionManager::UpdateFromTrade(const CThostFtdcTradeField& trade) {
     }
     auto pos = positions_[trade.InstrumentID];
 
-    // 2. 获取合约规则 (SHFE/Others)
+    // 2. 获取合约规则
     bool isSHFE = false;
     double multiple = 1.0;
     
     auto itMeta = instruments_meta_.find(trade.InstrumentID);
     if (itMeta != instruments_meta_.end()) {
-        // THOST_FTDC_PDT_UseHistory ('1') -> SHFE/INE Mode
         isSHFE = (itMeta->second.position_date_type == THOST_FTDC_PDT_UseHistory);
         multiple = itMeta->second.volume_multiple;
     } else {
-        // Fallback: Check ExchangeID string
-        // CTP ExchangeID is char[9]
         if (std::string(trade.ExchangeID) == "SHFE" || std::string(trade.ExchangeID) == "INE") {
             isSHFE = true;
         }
     }
 
-    // 3. 更新逻辑
-    // OffsetFlag: Open, Close, CloseToday, CloseYesterday
-    // Direction: Buy(0), Sell(1)
-    
-    // 开仓?
+    // 判断当前成交是否今仓：比较开仓日期与交易日
+    bool isToday = trading_day_.empty() || (std::string(trade.TradeDate) == trading_day_);
+
+    // 3. 开仓逻辑
     if (trade.OffsetFlag == THOST_FTDC_OF_Open) {
+        OpenDetail detail(trade.Price, trade.Volume, trade.TradeDate, isToday);
+        
         if (trade.Direction == THOST_FTDC_D_Buy) {
-            // 买开 -> 多头增加 (今仓)
+            // 买开 → 多头增加
             pos->LongPosition += trade.Volume;
             pos->LongTodayPosition += trade.Volume;
-            // Cost Update: Cost += Price * Vol * Mult
             pos->LongPositionCost += trade.Price * trade.Volume * multiple;
             pos->LongOpenCost += trade.Price * trade.Volume * multiple;
-            // 简单平均价可以根据 Cost / Pos 算出，无需单独存
+            pos->LongDetails.push_back(detail);
         } else {
-            // 卖开 -> 空头增加 (今仓)
+            // 卖开 → 空头增加
             pos->ShortPosition += trade.Volume;
             pos->ShortTodayPosition += trade.Volume;
             pos->ShortPositionCost += trade.Price * trade.Volume * multiple;
             pos->ShortOpenCost += trade.Price * trade.Volume * multiple;
+            pos->ShortDetails.push_back(detail);
         }
-    } 
-    // 平仓? (Close, CloseToday, CloseYesterday)
+    }
+    // 4. 平仓逻辑 (FIFO)
     else {
-        // 卖平 -> 减少多头
+        double closePrice = trade.Price;
+        int remainToClose = trade.Volume;
+
         if (trade.Direction == THOST_FTDC_D_Sell) {
-             double originalVol = pos->LongPosition;
-             pos->LongPosition -= trade.Volume;
-             
-             // 盈亏计算: (Price - OpenCostAvg) * Vol * Mult? 
-             // 简单起见，这里只更新持仓量。盈亏通常由 QryInvestorPosition 返回或者单独计算。
-             // 这里我们至少要更新成本 (按比例扣减)
-             double costToDeduct = 0.0;
-             double avgCost = 0.0;
-             if (originalVol > 0) {
-                 avgCost = pos->LongPositionCost / originalVol;
-                 costToDeduct = avgCost * trade.Volume;
-             }
-             pos->LongPositionCost -= costToDeduct;
-             
-             // Realized PnL: (Sell Price - Avg Cost) * Volume * Multiplier
-             // Note: costToDeduct = (Avg Price * Multiplier) * Volume
-             double pnl = (trade.Price * trade.Volume * multiple) - costToDeduct;
-             pos->LongCloseProfit += pnl;
-             totalPnl += pnl;
-
-             // 处理今昨
-             if (isSHFE) {
-                 if (trade.OffsetFlag == THOST_FTDC_OF_CloseToday) {
-                     pos->LongTodayPosition -= trade.Volume;
-                 } else {
-                     // CloseYesterday or Close (on SHFE Close usually means CloseYd)
-                     pos->LongYdPosition -= trade.Volume;
-                 }
-             } else {
-                 // 非上期所：优先平昨
-                 if (pos->LongYdPosition >= trade.Volume) {
-                     pos->LongYdPosition -= trade.Volume;
-                 } else {
-                     // 昨仓不够，扣完昨仓扣今仓
-                     int remain = trade.Volume - pos->LongYdPosition;
-                     pos->LongYdPosition = 0;
-                     pos->LongTodayPosition -= remain;
-                 }
-             }
-        } 
-        // 买平 -> 减少空头
+            // 卖平 → 减少多头
+            pos->LongPosition -= trade.Volume;
+            
+            // 确定要平的是今仓还是昨仓
+            bool closeToday = (trade.OffsetFlag == THOST_FTDC_OF_CloseToday);
+            bool closeYd = (trade.OffsetFlag == THOST_FTDC_OF_CloseYesterday);
+            
+            // FIFO 扣减：从 LongDetails 队列头部逐笔匹配
+            auto& details = pos->LongDetails;
+            auto it = details.begin();
+            while (it != details.end() && remainToClose > 0) {
+                // SHFE 需要精确匹配今/昨
+                if (isSHFE) {
+                    if (closeToday && !it->is_today) { ++it; continue; }
+                    if (closeYd && it->is_today) { ++it; continue; }
+                }
+                
+                int matchVol = std::min(remainToClose, it->volume);
+                
+                // 逐笔盈亏: (平仓价 - 开仓价) × 手数 × 乘数
+                double pnl = (closePrice - it->price) * matchVol * multiple;
+                totalPnl += pnl;
+                
+                // 扣减成本
+                double costReduced = it->price * matchVol * multiple;
+                pos->LongPositionCost -= costReduced;
+                
+                it->volume -= matchVol;
+                remainToClose -= matchVol;
+                
+                if (it->volume <= 0) {
+                    it = details.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            
+            pos->LongCloseProfit += totalPnl;
+            
+            // 更新今昨仓计数
+            if (isSHFE) {
+                if (closeToday) {
+                    pos->LongTodayPosition -= trade.Volume;
+                } else {
+                    pos->LongYdPosition -= trade.Volume;
+                }
+            } else {
+                // 非SHFE：优先平昨
+                if (pos->LongYdPosition >= trade.Volume) {
+                    pos->LongYdPosition -= trade.Volume;
+                } else {
+                    int remain = trade.Volume - pos->LongYdPosition;
+                    pos->LongYdPosition = 0;
+                    pos->LongTodayPosition -= remain;
+                }
+            }
+        }
         else {
-             pos->ShortPosition -= trade.Volume;
-             
-             double originalVol = pos->ShortPosition + trade.Volume;
-             double costToDeduct = 0.0;
-             if (originalVol > 0) {
-                 double avgCost = pos->ShortPositionCost / originalVol;
-                 costToDeduct = avgCost * trade.Volume;
-             }
-             pos->ShortPositionCost -= costToDeduct;
-
-             // Short Profit: (Entry Price - Exit/Buy Price) * Vol * Mult
-             // costToDeduct = Entry Price * Vol * Mult
-             // Exit Cost = trade.Price * Vol * Mult
-             double pnl = costToDeduct - (trade.Price * trade.Volume * multiple);
-             pos->ShortCloseProfit += pnl;
-             totalPnl += pnl;
-             
-             if (isSHFE) {
-                 if (trade.OffsetFlag == THOST_FTDC_OF_CloseToday) {
-                     pos->ShortTodayPosition -= trade.Volume;
-                 } else {
-                     pos->ShortYdPosition -= trade.Volume;
-                 }
-             } else {
-                 if (pos->ShortYdPosition >= trade.Volume) {
-                     pos->ShortYdPosition -= trade.Volume;
-                 } else {
-                     int remain = trade.Volume - pos->ShortYdPosition;
-                     pos->ShortYdPosition = 0;
-                     pos->ShortTodayPosition -= remain;
-                 }
-             }
+            // 买平 → 减少空头
+            pos->ShortPosition -= trade.Volume;
+            
+            bool closeToday = (trade.OffsetFlag == THOST_FTDC_OF_CloseToday);
+            bool closeYd = (trade.OffsetFlag == THOST_FTDC_OF_CloseYesterday);
+            
+            auto& details = pos->ShortDetails;
+            auto it = details.begin();
+            while (it != details.end() && remainToClose > 0) {
+                if (isSHFE) {
+                    if (closeToday && !it->is_today) { ++it; continue; }
+                    if (closeYd && it->is_today) { ++it; continue; }
+                }
+                
+                int matchVol = std::min(remainToClose, it->volume);
+                
+                // 空头盈亏: (开仓价 - 平仓价) × 手数 × 乘数
+                double pnl = (it->price - closePrice) * matchVol * multiple;
+                totalPnl += pnl;
+                
+                double costReduced = it->price * matchVol * multiple;
+                pos->ShortPositionCost -= costReduced;
+                
+                it->volume -= matchVol;
+                remainToClose -= matchVol;
+                
+                if (it->volume <= 0) {
+                    it = details.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            
+            pos->ShortCloseProfit += totalPnl;
+            
+            if (isSHFE) {
+                if (closeToday) {
+                    pos->ShortTodayPosition -= trade.Volume;
+                } else {
+                    pos->ShortYdPosition -= trade.Volume;
+                }
+            } else {
+                if (pos->ShortYdPosition >= trade.Volume) {
+                    pos->ShortYdPosition -= trade.Volume;
+                } else {
+                    int remain = trade.Volume - pos->ShortYdPosition;
+                    pos->ShortYdPosition = 0;
+                    pos->ShortTodayPosition -= remain;
+                }
+            }
         }
     }
     return totalPnl;

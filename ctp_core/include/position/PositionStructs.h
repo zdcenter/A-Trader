@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <deque>
+#include <cstring>
 #include <mutex>
 
 // 适配A-Trader，直接使用文件名，依赖 CMake 的 include_directories
@@ -12,6 +14,27 @@
 
 namespace atrader {
 namespace core {
+
+/**
+ * @brief 开仓明细 (FIFO 队列元素)
+ * 每笔开仓记录一条，平仓时按先进先出扣减
+ * 这是实现逐笔平仓盈亏的基础
+ */
+struct OpenDetail {
+    double price;          // 开仓价格
+    int    volume;         // 剩余未平手数（初始等于开仓手数，部分平仓后递减）
+    char   open_date[16];  // 开仓日期 (判断今昨仓)
+    bool   is_today;       // 是否今仓 (运行时由 PositionManager 维护)
+
+    OpenDetail() : price(0.0), volume(0), is_today(true) {
+        std::memset(open_date, 0, sizeof(open_date));
+    }
+    OpenDetail(double p, int v, const char* date, bool today)
+        : price(p), volume(v), is_today(today) {
+        std::memset(open_date, 0, sizeof(open_date));
+        std::strncpy(open_date, date, sizeof(open_date) - 1);
+    }
+};
 
 /**
  * @brief 持仓聚合结构体 (All-in-One Position Struct)
@@ -51,6 +74,10 @@ struct InstrumentPosition {
     double PreSettlementPrice;  // 昨结算价 (计算盈亏的关键基准)
     double Margin;              // 占用保证金 (Exchange Margin)
     double LastPrice;           // 最新价 (用于计算浮动盈亏)
+
+    // === FIFO 开仓明细队列 (逐笔平仓盈亏的核心) ===
+    std::deque<OpenDetail> LongDetails;   // 多头开仓明细 (先开的在前)
+    std::deque<OpenDetail> ShortDetails;  // 空头开仓明细
     
     // === 构造函数 ===
     InstrumentPosition() {
