@@ -8,6 +8,7 @@
 
 # --- Build Output (General) ---
 /build/
+/build-windows/
 build/
 bin/
 # General binary ignores
