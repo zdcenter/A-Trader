@@ -29,6 +29,11 @@ int main(int argc, char *argv[]) {
     app.setOrganizationDomain("quantlabs.local");
     app.setApplicationName("qt_manager");
     
+    // 将配置文件存储到可执行程序同级目录，便于跟随程序分发
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       QCoreApplication::applicationDirPath());
+    
     // 加载配置文件
     QFile configFile("config.json");
     if (configFile.open(QIODevice::ReadOnly)) {
