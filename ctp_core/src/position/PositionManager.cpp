@@ -40,9 +40,9 @@ std::shared_ptr<InstrumentPosition> PositionManager::GetPosition(const std::stri
     return nullptr;
 }
 
-std::unordered_map<std::string, std::shared_ptr<InstrumentPosition>>& PositionManager::GetAllPositions() {
+std::unordered_map<std::string, std::shared_ptr<InstrumentPosition>> PositionManager::GetAllPositions() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return positions_;
+    return positions_;  // 返回快照副本，外部遍历时不再需要持锁
 }
 
 void PositionManager::Clear() {
@@ -78,6 +78,9 @@ double PositionManager::UpdateFromTrade(const CThostFtdcTradeField& trade) {
     
     auto itMeta = instruments_meta_.find(trade.InstrumentID);
     if (itMeta != instruments_meta_.end()) {
+        // 使用历史持仓
+        // #define THOST_FTDC_PDT_UseHistory '1'
+        // #define THOST_FTDC_PDT_NoUseHistory '2'
         isSHFE = (itMeta->second.position_date_type == THOST_FTDC_PDT_UseHistory);
         multiple = itMeta->second.volume_multiple;
     } else {
@@ -96,14 +99,22 @@ double PositionManager::UpdateFromTrade(const CThostFtdcTradeField& trade) {
         if (trade.Direction == THOST_FTDC_D_Buy) {
             // 买开 → 多头增加
             pos->LongPosition += trade.Volume;
-            pos->LongTodayPosition += trade.Volume;
+            if (isToday) {
+                pos->LongTodayPosition += trade.Volume;
+            } else {
+                pos->LongYdPosition += trade.Volume;
+            }
             pos->LongPositionCost += trade.Price * trade.Volume * multiple;
             pos->LongOpenCost += trade.Price * trade.Volume * multiple;
             pos->LongDetails.push_back(detail);
         } else {
             // 卖开 → 空头增加
             pos->ShortPosition += trade.Volume;
-            pos->ShortTodayPosition += trade.Volume;
+            if (isToday) {
+                pos->ShortTodayPosition += trade.Volume;
+            } else {
+                pos->ShortYdPosition += trade.Volume;
+            }
             pos->ShortPositionCost += trade.Price * trade.Volume * multiple;
             pos->ShortOpenCost += trade.Price * trade.Volume * multiple;
             pos->ShortDetails.push_back(detail);

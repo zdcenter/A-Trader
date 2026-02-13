@@ -204,7 +204,7 @@ int main() {
     // 5. 状态同步
     handlers[QuantLabs::CmdType::SyncState] = [&](const json&) {
         std::cout << "[Main] Sync State requested by Client." << std::endl;
-        td_handler.qryAccount();
+        td_handler.reqQueryTradingAccount();
         td_handler.pushCachedPositions();
         td_handler.pushCachedInstruments();
         td_handler.pushCachedOrdersAndTrades();

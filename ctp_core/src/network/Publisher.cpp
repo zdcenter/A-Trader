@@ -76,7 +76,11 @@ void Publisher::publishPosition(const PositionData& data, int64_t snapshot_seq) 
     j["today_position"] = data.today_position;
     j["yd_position"] = data.yd_position;
     j["position_cost"] = data.position_cost;
+    j["open_cost"] = data.open_cost;
     j["pos_profit"] = data.pos_profit;
+    j["close_profit"] = data.close_profit;
+    j["margin"] = data.margin;
+    j["volume_multiple"] = data.volume_multiple;
     j["snapshot_seq"] = snapshot_seq; // 批次号
 
     std::string payload = j.dump();

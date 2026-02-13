@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <cstring>
+#include <cmath>
 
 namespace QuantLabs {
 
@@ -19,32 +20,33 @@ QVariant PositionModel::data(const QModelIndex &index, int role) const {
     const auto &item = _position_data.at(index.row());
     switch (role) {
         case IdRole: return item.instrumentId;
-        // CTP Direction: '0'/'2' Buy, '1'/'3' Sell. Usually '2'/'3' for net pos.
         case DirectionRole: return (item.data.direction == '2' || item.data.direction == '0') ? "BUY" : "SELL";
         case PosRole: return item.data.position;
         case TodayPosRole: return item.data.today_position;
         case YdPosRole: return item.data.yd_position;
-        case CostRole: return item.data.position_cost;
-        case ProfitRole: return QString::number(item.profit, 'f', 2);
+        case AvgPriceRole: {
+            // 均价 = open_cost / (position × volume_multiple)
+            // volume_multiple 优先用 core 推送的值，其次查合约字典
+            int mult = item.data.volume_multiple;
+            if (mult <= 0 && _instrument_dict.contains(item.instrumentId)) {
+                mult = _instrument_dict[item.instrumentId].volume_multiple;
+            }
+            if (mult <= 0) mult = 1;  // 兜底
+            
+            if (item.data.position > 0 && item.data.open_cost > 0) {
+                return QString::number(item.data.open_cost / (item.data.position * mult), 'f', 2);
+            }
+            return "0.00";
+        }
         case LastPriceRole: return item.lastPrice;
+        case PosProfitRole: return QString::number(item.data.pos_profit, 'f', 2);
+        case CloseProfitRole: return QString::number(item.data.close_profit, 'f', 2);
+        case MarginRole: return QString::number(item.data.margin, 'f', 2);
         case BidPrice1Role: return item.bidPrice1;
         case AskPrice1Role: return item.askPrice1;
         case PriceTickRole: return item.priceTick;
         case UpperLimitRole: return item.upperLimit;
         case LowerLimitRole: return item.lowerLimit;
-        case AvgPriceRole: {
-             double multiplier = 10.0;
-             if (_instrument_dict.contains(item.instrumentId)) {
-                 multiplier = _instrument_dict[item.instrumentId].volume_multiple;
-                 if (multiplier < 1) multiplier = 10.0; 
-             } else {
-                 if (item.instrumentId.startsWith("rb")) multiplier = 10.0;
-             }
-             if (item.data.position > 0) {
-                return QString::number(item.data.position_cost / (item.data.position * multiplier), 'f', 2);
-             }
-             return "0.00";
-        }
         case ExchangeRole: {
              QString exId = QString::fromUtf8(item.data.exchange_id);
              if (!exId.isEmpty()) return exId;
@@ -65,15 +67,16 @@ QHash<int, QByteArray> PositionModel::roleNames() const {
     roles[PosRole] = "position";
     roles[TodayPosRole] = "todayPosition";
     roles[YdPosRole] = "ydPosition";
-    roles[CostRole] = "cost";
-    roles[ProfitRole] = "profit";
+    roles[AvgPriceRole] = "avgPrice";
     roles[LastPriceRole] = "lastPrice";
+    roles[PosProfitRole] = "posProfit";
+    roles[CloseProfitRole] = "closeProfit";
+    roles[MarginRole] = "margin";
     roles[BidPrice1Role] = "bidPrice1";
     roles[AskPrice1Role] = "askPrice1";
     roles[PriceTickRole] = "priceTick";
     roles[UpperLimitRole] = "upperLimit";
     roles[LowerLimitRole] = "lowerLimit";
-    roles[AvgPriceRole] = "avgPrice";
     roles[ExchangeRole] = "exchangeId";
     return roles;
 }
@@ -84,12 +87,6 @@ void PositionModel::updatePosition(const QJsonObject& j) {
         if (j.contains("instrument_id")) id = j["instrument_id"].toString();
         else if (j.contains("id")) id = j["id"].toString();
         else return;
-
-        // 检查是否为全量快照
-        bool is_snapshot = false;
-        if (j.contains("is_snapshot")) {
-            is_snapshot = j["is_snapshot"].toBool();
-        }
 
         // Parse direction
         char dir = '0';
@@ -106,17 +103,14 @@ void PositionModel::updatePosition(const QJsonObject& j) {
         // 检查快照批次号
         int64_t snapshot_seq = 0;
         if (j.contains("snapshot_seq")) {
-            // QJsonValue doesn't have toLongLong, use toDouble or toVariant
             snapshot_seq = (int64_t)j["snapshot_seq"].toDouble();
         } else if (j.contains("is_snapshot")) {
-             bool is_ss = j["is_snapshot"].toBool();
-             if (is_ss) snapshot_seq = 1; 
+             if (j["is_snapshot"].toBool()) snapshot_seq = 1; 
         }
 
-        // 如果是全量快照 (seq > 0)，且批次号发生变更，清空旧数据
+        // 全量快照时清空旧数据
         static int64_t last_snapshot_seq = 0;
         if (snapshot_seq > 0 && snapshot_seq != last_snapshot_seq) {
-            qDebug() << "[PositionModel] New snapshot batch detected (Seq:" << snapshot_seq << "), clearing old data...";
             beginResetModel();
             _position_data.clear();
             _instrument_to_indices.clear();
@@ -124,9 +118,8 @@ void PositionModel::updatePosition(const QJsonObject& j) {
             last_snapshot_seq = snapshot_seq;
         }
         
+        // 查找已存在的行
         int row = -1;
-        // Search by ID and Direction
-        // Optimization: Use _instrument_to_indices to narrow down search
         if (_instrument_to_indices.contains(id)) {
             const auto& indices = _instrument_to_indices[id];
             for (int idx : indices) {
@@ -140,36 +133,40 @@ void PositionModel::updatePosition(const QJsonObject& j) {
         }
 
         if (row != -1) {
-            // Update existing
+            // 更新已有行
             auto& d = _position_data[row].data;
-            if(j.contains("position")) d.position = j["position"].toInt(); else if(j.contains("pos")) d.position = j["pos"].toInt();
-            if(j.contains("today_position")) d.today_position = j["today_position"].toInt(); else if(j.contains("td")) d.today_position = j["td"].toInt();
-            if(j.contains("yd_position")) d.yd_position = j["yd_position"].toInt(); else if(j.contains("yd")) d.yd_position = j["yd"].toInt();
-            if(j.contains("position_cost")) d.position_cost = j["position_cost"].toDouble(); else if(j.contains("cost")) d.position_cost = j["cost"].toDouble();
+            if(j.contains("position")) d.position = j["position"].toInt();
+            if(j.contains("today_position")) d.today_position = j["today_position"].toInt();
+            if(j.contains("yd_position")) d.yd_position = j["yd_position"].toInt();
+            if(j.contains("position_cost")) d.position_cost = j["position_cost"].toDouble();
+            if(j.contains("open_cost")) d.open_cost = j["open_cost"].toDouble();
+            if(j.contains("pos_profit")) d.pos_profit = j["pos_profit"].toDouble();
+            if(j.contains("close_profit")) d.close_profit = j["close_profit"].toDouble();
+            if(j.contains("margin")) d.margin = j["margin"].toDouble();
+            if(j.contains("volume_multiple")) d.volume_multiple = j["volume_multiple"].toInt();
             if(j.contains("exchange_id")) {
                 std::string s = j["exchange_id"].toString().toStdString();
                 strncpy(d.exchange_id, s.c_str(), sizeof(d.exchange_id)-1);
             }
             
-            // 如果持仓量 <= 0，从列表中删除
+            // 持仓量 <= 0 时删除行
             if (d.position <= 0) {
                  beginRemoveRows(QModelIndex(), row, row);
                  _position_data.removeAt(row);
                  endRemoveRows();
                  
-                 // 重建索引映射 (因为删除中间行会导致后续行号变化)
+                 // 重建索引
                  _instrument_to_indices.clear();
                  for(int i=0; i<_position_data.size(); ++i) {
                      _instrument_to_indices[QString::fromUtf8(_position_data[i].data.instrument_id)].append(i);
                  }
             } else {
-                 calculateProfit(_position_data[row]);
                  emit dataChanged(index(row), index(row));
             }
         } else {
-            // Insert new (only if pos > 0)
+            // 新增行（仅 position > 0 时）
             int pos = 0;
-            if(j.contains("position")) pos = j["position"].toInt(); else if(j.contains("pos")) pos = j["pos"].toInt();
+            if(j.contains("position")) pos = j["position"].toInt();
             
             if (pos > 0) {
                 beginInsertRows(QModelIndex(), _position_data.count(), _position_data.count());
@@ -181,27 +178,26 @@ void PositionModel::updatePosition(const QJsonObject& j) {
                 item.data.direction = dir;
                 item.data.position = pos;
                 
-                if(j.contains("today_position")) item.data.today_position = j["today_position"].toInt(); else if(j.contains("td")) item.data.today_position = j["td"].toInt();
-                if(j.contains("yd_position")) item.data.yd_position = j["yd_position"].toInt(); else if(j.contains("yd")) item.data.yd_position = j["yd"].toInt();
-                if(j.contains("position_cost")) item.data.position_cost = j["position_cost"].toDouble(); else if(j.contains("cost")) item.data.position_cost = j["cost"].toDouble();
+                if(j.contains("today_position")) item.data.today_position = j["today_position"].toInt();
+                if(j.contains("yd_position")) item.data.yd_position = j["yd_position"].toInt();
+                if(j.contains("position_cost")) item.data.position_cost = j["position_cost"].toDouble();
+                if(j.contains("open_cost")) item.data.open_cost = j["open_cost"].toDouble();
+                if(j.contains("pos_profit")) item.data.pos_profit = j["pos_profit"].toDouble();
+                if(j.contains("close_profit")) item.data.close_profit = j["close_profit"].toDouble();
+                if(j.contains("margin")) item.data.margin = j["margin"].toDouble();
+                if(j.contains("volume_multiple")) item.data.volume_multiple = j["volume_multiple"].toInt();
                 if(j.contains("exchange_id")) {
                     std::string s = j["exchange_id"].toString().toStdString();
                     strncpy(item.data.exchange_id, s.c_str(), sizeof(item.data.exchange_id)-1);
                 }
-                
-                item.lastPrice = 0.0;
-                item.bidPrice1 = 0.0;
-                item.askPrice1 = 0.0;
-                item.priceTick = 0.0;
-                item.upperLimit = 0.0;
-                item.lowerLimit = 0.0;
-                item.profit = 0.0;
                 
                 _position_data.append(item);
                 _instrument_to_indices[id].append(_position_data.count() - 1);
                 endInsertRows();
             }
         }
+        
+        recalcTotalProfit();
     } catch (...) {}
 }
 
@@ -238,23 +234,12 @@ void PositionModel::updatePrice(const QJsonObject& j) {
             _position_data[row].upperLimit = upperLimit;
             _position_data[row].lowerLimit = lowerLimit;
             
-            // 从合约字典获取 priceTick
             if (_instrument_dict.contains(id)) {
                 _position_data[row].priceTick = _instrument_dict[id].price_tick;
             }
             
-            calculateProfit(_position_data[row]);
-            emit dataChanged(index(row), index(row), {ProfitRole, CostRole, LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
-        }
-
-        double current_all_profit = 0.0;
-        for (const auto& item : _position_data) {
-            current_all_profit += item.profit;
-        }
-        
-        if (std::abs(current_all_profit - _total_profit) > 0.01) {
-            _total_profit = current_all_profit;
-            emit totalProfitChanged(_total_profit);
+            emit dataChanged(index(row), index(row), 
+                {LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
         }
     } catch (...) {}
 }
@@ -277,18 +262,8 @@ void PositionModel::updatePriceBinary(const TickData& data) {
             item.priceTick = _instrument_dict[id].price_tick;
         }
         
-        calculateProfit(item);
-        emit dataChanged(index(row), index(row), {ProfitRole, CostRole, LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
-    }
-
-    double newTotal = 0.0;
-    for (const auto& item : _position_data) {
-        newTotal += item.profit;
-    }
-    
-    if (std::abs(newTotal - _total_profit) > 0.01) {
-        _total_profit = newTotal;
-        emit totalProfitChanged(_total_profit);
+        emit dataChanged(index(row), index(row), 
+            {LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
     }
 }
 
@@ -298,10 +273,8 @@ void PositionModel::updateInstrument(const QJsonObject& j) {
         if (j.contains("instrument_id")) id = j["instrument_id"].toString();
         else return;
         
-        InstrumentData info;
-        std::memset(&info, 0, sizeof(info));
+        InstrumentMeta info;  // 默认构造已全零初始化
         
-        // Basic fields
         strncpy(info.instrument_id, id.toStdString().c_str(), sizeof(info.instrument_id)-1);
         if(j.contains("instrument_name")) {
              std::string name = j["instrument_name"].toString().toStdString();
@@ -315,25 +288,21 @@ void PositionModel::updateInstrument(const QJsonObject& j) {
         if(j.contains("volume_multiple")) info.volume_multiple = j["volume_multiple"].toInt();
         if(j.contains("price_tick")) info.price_tick = j["price_tick"].toDouble();
         
-        // Margins
+        // 保证金率
         if(j.contains("long_margin_ratio_by_money")) info.long_margin_ratio_by_money = j["long_margin_ratio_by_money"].toDouble();
         if(j.contains("short_margin_ratio_by_money")) info.short_margin_ratio_by_money = j["short_margin_ratio_by_money"].toDouble();
         
-        // Fees
+        // 手续费率
         if(j.contains("open_ratio_by_money")) info.open_ratio_by_money = j["open_ratio_by_money"].toDouble();
         if(j.contains("close_ratio_by_money")) info.close_ratio_by_money = j["close_ratio_by_money"].toDouble();
         if(j.contains("close_today_ratio_by_money")) info.close_today_ratio_by_money = j["close_today_ratio_by_money"].toDouble();
 
         _instrument_dict[id] = info;
-        
-        qDebug() << "[PositionModel] Full Instrument Dict Sync:" << id 
-                 << "Mult:" << info.volume_multiple 
-                 << "Margin(L):" << info.long_margin_ratio_by_money;
 
+        // 合约信息更新后触发相关持仓行刷新（均价可能需要 volume_multiple）
         if (_instrument_to_indices.contains(id)) {
             for (int row : _instrument_to_indices[id]) {
                 if (row >= 0 && row < _position_data.size()) {
-                    calculateProfit(_position_data[row]);
                     emit dataChanged(index(row), index(row));
                 }
             }
@@ -341,26 +310,15 @@ void PositionModel::updateInstrument(const QJsonObject& j) {
     } catch (...) {}
 }
 
-void PositionModel::calculateProfit(PositionItem& item) {
-    if (item.lastPrice <= 0.001) return;
-
-    double multiplier = 10.0; 
-    if (_instrument_dict.contains(item.instrumentId)) {
-        multiplier = _instrument_dict[item.instrumentId].volume_multiple;
-        if (multiplier < 1) multiplier = 10.0; // protection
-    } else {
-        // Fallback guess logic
-        if (item.instrumentId.startsWith("rb")) multiplier = 10.0;
-        // ... add more if needed or just wait for instrument dict
+void PositionModel::recalcTotalProfit() {
+    double newTotal = 0.0;
+    for (const auto& item : _position_data) {
+        newTotal += item.data.pos_profit;
     }
-
-    double current_value = item.lastPrice * item.data.position * multiplier;
     
-    // Cost in CTP is usually total cost.
-    if (item.data.direction == '2' || item.data.direction == '0') { // Buy
-        item.profit = current_value - item.data.position_cost;
-    } else { // Sell
-        item.profit = item.data.position_cost - current_value;
+    if (std::abs(newTotal - _total_profit) > 0.01) {
+        _total_profit = newTotal;
+        emit totalProfitChanged(_total_profit);
     }
 }
 

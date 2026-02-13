@@ -22,7 +22,7 @@ public:
 
     // 查询接口
     std::shared_ptr<InstrumentPosition> GetPosition(const std::string& instrumentID);
-    std::unordered_map<std::string, std::shared_ptr<InstrumentPosition>>& GetAllPositions();
+    std::unordered_map<std::string, std::shared_ptr<InstrumentPosition>> GetAllPositions();
     void Clear();
 
 private:

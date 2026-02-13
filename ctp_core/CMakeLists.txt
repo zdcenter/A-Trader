@@ -4,6 +4,16 @@ project(ctp_core)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 构建类型 (默认 Debug，支持 Release)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+# Debug 模式下定义 _DEBUG 宏，启用调试日志
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(_DEBUG)
+endif()
+
 # 探测平台
 if(WIN32)
     set(PLATFORM "win64")

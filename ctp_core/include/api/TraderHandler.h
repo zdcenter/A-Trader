@@ -9,7 +9,6 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
-#include <filesystem>
 #include <iostream>
 #include <map>
 #include <chrono>
@@ -44,8 +43,10 @@ public:
     PositionManager& getPositionManager() { return m_posManager; }
 
     // 查询接口
-    void qryAccount();
-    void qryPosition();
+    void reqQueryBrokerTradingParams();
+    void reqQueryTradingAccount();
+    void reqQueryPosition();
+
     void qryInstrument(const std::string& instrument_id);
     void qryAllInstruments(); // 全量查询合约
     void qryMarginRate(const std::string& instrument_id);
@@ -63,7 +64,9 @@ public:
     void OnRspAuthenticate(CThostFtdcRspAuthenticateField *pRspAuthenticateField, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnRspSettlementInfoConfirm(CThostFtdcSettlementInfoConfirmField *pSettlementInfoConfirm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
-    
+	///请求查询经纪公司交易参数响应
+	virtual void OnRspQryBrokerTradingParams(CThostFtdcBrokerTradingParamsField* pBrokerTradingParams, CThostFtdcRspInfoField* pRspInfo, int nRequestID, bool bIsLast);
+
     // 资金与持仓查询回调
     void OnRspQryTradingAccount(CThostFtdcTradingAccountField *pTradingAccount, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
     void OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pInvestorPosition, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) override;
@@ -90,7 +93,7 @@ public:
 private:
     void queryLoop();
     void updateLocalPosition(CThostFtdcTradeField *pTrade);
-    void updateLocalAccount(CThostFtdcTradeField *pTrade);
+    void updateLocalAccount(CThostFtdcTradeField *pTrade, double commission, double realized_pnl);
     
     // New: Position Manager
     PositionManager m_posManager;
@@ -119,10 +122,8 @@ private:
     long long cached_second_ = 0;       // 缓存的秒时间戳
     char cached_ref_prefix_[10] = {0};  // 缓存的 "DDHHMMSS" 字符串
 
-    // 缓存 (恢复)
+    // 缓存
     std::map<std::string, InstrumentMeta> instrument_cache_;
-    // std::map<std::string, PositionData> position_cache_; // REMOVED: Replaced by PositionManager
-    // std::mutex position_mtx_; // REMOVED
     AccountData account_cache_;
 
     // 查询队列 (线程安全)
@@ -158,18 +159,14 @@ public:
     // 推送当日所有委托和成交（用于前端重连）
     void pushCachedOrdersAndTrades();
 
-    void loadInstrumentsFromDB(); // Added
-    void loadDayOrdersFromDB(); // Added
-    void restorePositionDetails(); // Added
-    void syncSubscribedInstruments(); // Added
+    void loadInstrumentsFromDB();
+    void loadDayOrdersFromDB();
+    void syncSubscribedInstruments();
 
     // Helper for Strategy
     bool getInstrumentMeta(const std::string& id, InstrumentMeta& out_data);
 
 private:
-    // 开仓明细队列 (使用共享结构，便于后续可能的前端展示)
-    // Key: InstrumentID_Direction (e.g. "rb2505_0" for Long, "rb2505_1" for Short)
-    // 开仓明细队列及同步锁已移除 (Refactored to PositionManager)
 };
 
 } // namespace QuantLabs

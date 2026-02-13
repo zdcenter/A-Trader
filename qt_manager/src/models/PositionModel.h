@@ -11,15 +11,14 @@ namespace QuantLabs {
 
 struct PositionItem {
     PositionData data;
-    // Helper fields for UI
+    // UI 辅助字段（行情推送填充）
     QString instrumentId; 
-    double lastPrice;
-    double bidPrice1;  // 买一价
-    double askPrice1;  // 卖一价
-    double priceTick;  // 最小变动价位
-    double upperLimit; // 涨停板
-    double lowerLimit; // 跌停板
-    double profit;
+    double lastPrice = 0.0;
+    double bidPrice1 = 0.0;   // 买一价
+    double askPrice1 = 0.0;   // 卖一价
+    double priceTick = 0.0;   // 最小变动价位
+    double upperLimit = 0.0;  // 涨停板
+    double lowerLimit = 0.0;  // 跌停板
 };
 
 class PositionModel : public QAbstractListModel {
@@ -32,15 +31,16 @@ public:
         PosRole,
         TodayPosRole,
         YdPosRole,
-        CostRole,
-        ProfitRole,
+        AvgPriceRole,       // 持仓均价 = open_cost / (pos × mult)
         LastPriceRole,
+        PosProfitRole,      // 持仓浮动盈亏 (core 推送)
+        CloseProfitRole,    // 已实现平仓盈亏 (core 推送)
+        MarginRole,         // 占用保证金
         BidPrice1Role,
         AskPrice1Role,
         PriceTickRole,
         UpperLimitRole,
         LowerLimitRole,
-        AvgPriceRole,
         ExchangeRole
     };
 
@@ -62,12 +62,12 @@ signals:
     void totalProfitChanged(double totalProfit);
 
 private:
-    void calculateProfit(PositionItem& item);
+    void recalcTotalProfit();
     QVector<PositionItem> _position_data;
     QHash<QString, QVector<int>> _instrument_to_indices; 
     
-    // Use shared InstrumentData
-    QHash<QString, InstrumentData> _instrument_dict;
+    // 合约信息字典（复用 shared 的 InstrumentMeta）
+    QHash<QString, InstrumentMeta> _instrument_dict;
     
     double _total_profit = 0.0;
 };

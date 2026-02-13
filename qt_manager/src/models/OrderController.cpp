@@ -109,7 +109,7 @@ void OrderController::updateInstrument(const QJsonObject& j) {
         if (idStr.isEmpty()) return;
         
         // 增量更新逻辑：先获取现有数据
-        InstrumentData info;
+        InstrumentMeta info;
         if (_instrument_dict.contains(idStr)) {
             info = _instrument_dict[idStr];
         } else {

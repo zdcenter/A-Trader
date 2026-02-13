@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstring>
 #include <cstdint>
 
 namespace QuantLabs {
@@ -60,16 +61,20 @@ struct TickData {
     int update_millisec;         // 更新毫秒
 };
 
-// 持仓数据
+// 持仓数据 (推送给前端的扁平化结构，每个方向一条)
 struct PositionData {
     char instrument_id[64];
     char exchange_id[16];   // 交易所代码
-    char direction;        // '0' 多, '1' 空
-    int position;          // 总持仓
-    int today_position;    // 今仓
-    int yd_position;       // 昨仓
-    double position_cost;  // 持仓成本
-    double pos_profit;     // 持仓盈亏
+    char direction;         // '2' Long(多), '3' Short(空) — 遵循 CTP THOST_FTDC_PD_xxx
+    int position;           // 总持仓
+    int today_position;     // 今仓
+    int yd_position;        // 昨仓
+    double position_cost;   // 持仓成本 (SHFE昨仓按昨结, 今仓按开仓价)
+    double open_cost;       // 开仓成本 (始终按开仓价, 前端算均价: open_cost / position / volume_multiple)
+    double pos_profit;      // 持仓盈亏 (浮动盈亏)
+    double close_profit;    // 平仓盈亏 (已实现盈亏)
+    double margin;          // 占用保证金
+    int volume_multiple;    // 合约乘数 (前端计算均价用)
 };
 
 // 逐笔持仓明细数据 (对应 CThostFtdcInvestorPositionDetailField)
@@ -106,7 +111,7 @@ struct AccountData {
     double close_profit;   // 平仓盈亏
 };
 
-// 合约属性数据 (Refactored to InstrumentMeta)
+// 合约属性数据
 struct InstrumentMeta {
     char instrument_id[64];
     char instrument_name[64]; 
@@ -137,6 +142,9 @@ struct InstrumentMeta {
     
     // Trading Day for validity check
     char trading_day[16];
+
+    // 默认构造: 全零初始化，避免脏数据
+    InstrumentMeta() { std::memset(this, 0, sizeof(InstrumentMeta)); }
 };
 
 /**

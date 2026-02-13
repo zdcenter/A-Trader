@@ -157,7 +157,7 @@ private:
     
     QVariantList _bidPrices, _bidVolumes, _askPrices, _askVolumes;
     
-    QHash<QString, InstrumentData> _instrument_dict;
+    QHash<QString, InstrumentMeta> _instrument_dict;
 
     struct PosSummary {
         int longTotal = 0;

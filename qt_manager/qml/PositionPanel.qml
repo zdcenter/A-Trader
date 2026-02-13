@@ -7,8 +7,8 @@ import "."
 /**
  * 持仓面板组件
  * 功能：
- * - 显示当前持仓列表
- * - 显示持仓的盈亏、成本、现价等信息
+ * - 显示当前持仓列表（含浮动盈亏、已实现盈亏、持仓均价）
+ * - 双击快速平仓
  */
 FocusScope {
     id: root
@@ -65,13 +65,15 @@ FocusScope {
             Row {
                 anchors.fill: parent
                 
-                Text { width: parent.width * 0.08; text: "交易所"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                Text { width: parent.width * 0.15; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                Text { width: parent.width * 0.07; text: "方向"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                Text { width: parent.width * 0.20; text: "总/昨/今"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                Text { width: parent.width * 0.15; text: "持仓均价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                Text { width: parent.width * 0.15; text: "现价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                Text { width: parent.width * 0.20; text: "持仓盈亏"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.07; text: "交易所"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.12; text: "合约"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.06; text: "方向"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.14; text: "总/昨/今"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.12; text: "持仓均价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.12; text: "现价"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.12; text: "浮动盈亏"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.12; text: "平仓盈亏"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Text { width: parent.width * 0.13; text: "保证金"; color: "#aaaaaa"; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
             }
         }
         
@@ -82,7 +84,7 @@ FocusScope {
             Layout.fillHeight: true
             model: root.positionModel
             clip: true
-            currentIndex: -1  // 禁用默认选中
+            currentIndex: -1
             ScrollBar.vertical: ScrollBar {}
             
             delegate: Rectangle {
@@ -104,7 +106,9 @@ FocusScope {
                 required property double priceTick
                 required property double upperLimit
                 required property double lowerLimit
-                required property string profit
+                required property string posProfit
+                required property string closeProfit
+                required property string margin
                 
                 // 统一的选中和悬停样式
                 color: {
@@ -118,7 +122,7 @@ FocusScope {
                     anchors.fill: parent
                     
                     Text {
-                        width: parent.width * 0.08
+                        width: parent.width * 0.07
                         height: 40
                         text: exchangeId
                         color: "#aaaaaa"
@@ -126,7 +130,7 @@ FocusScope {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.15
+                        width: parent.width * 0.12
                         height: 40
                         text: instrumentId
                         color: "white"
@@ -134,7 +138,7 @@ FocusScope {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.07
+                        width: parent.width * 0.06
                         height: 40
                         text: direction
                         color: direction === "BUY" ? "#f44336" : "#4caf50"
@@ -142,7 +146,7 @@ FocusScope {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.20
+                        width: parent.width * 0.14
                         height: 40
                         text: position + " / " + ydPosition + " / " + todayPosition
                         color: "white"
@@ -150,7 +154,7 @@ FocusScope {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.15
+                        width: parent.width * 0.12
                         height: 40
                         text: avgPrice
                         color: "white"
@@ -158,7 +162,7 @@ FocusScope {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.15
+                        width: parent.width * 0.12
                         height: 40
                         text: lastPrice.toFixed(2)
                         color: "#aaaaaa"
@@ -166,11 +170,27 @@ FocusScope {
                         verticalAlignment: Text.AlignVCenter
                     }
                     Text {
-                        width: parent.width * 0.20
+                        width: parent.width * 0.12
                         height: 40
-                        text: profit
-                        color: parseFloat(profit) >= 0 ? "#f44336" : "#4caf50"
+                        text: posProfit
+                        color: parseFloat(posProfit) >= 0 ? "#f44336" : "#4caf50"
                         font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    Text {
+                        width: parent.width * 0.12
+                        height: 40
+                        text: closeProfit
+                        color: parseFloat(closeProfit) >= 0 ? "#f44336" : "#4caf50"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    Text {
+                        width: parent.width * 0.13
+                        height: 40
+                        text: margin
+                        color: "#aaaaaa"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -209,40 +229,35 @@ FocusScope {
                             var actionDir = (direction === "BUY") ? "SELL" : "BUY"
                             var finalPrice = lastPrice
                             
-                            // Strategy: Opponent Price +/- 5 Ticks (Aggressive Limit)
-                            // If Bid/Ask is valid, use it. Otherwise fallback to LastPrice +/- 2%
+                            // 对手价 ± 5 跳 (激进限价)
                             var ticks = 5
-                            var tickSize = priceTick > 0 ? priceTick : 1.0 // Default fallback?
+                            var tickSize = priceTick > 0 ? priceTick : 1.0
                             
-                            if (actionDir === "SELL") { // Close Long
+                            if (actionDir === "SELL") { // 平多
                                 if (bidPrice1 > 0) {
-                                     // Sell into the Bid (Aggressive: lower than bid)
                                      finalPrice = bidPrice1 - (ticks * tickSize)
                                 } else {
-                                     finalPrice = lastPrice * 0.98 // Fallback
+                                     finalPrice = lastPrice * 0.98
                                 }
-                                // Safety: Ensure > 0
                                 if (finalPrice < 0) finalPrice = 0.0
-                            } else { // Close Short (Buy)
+                            } else { // 平空
                                 if (askPrice1 > 0) {
-                                     // Buy into the Ask (Aggressive: higher than ask)
                                      finalPrice = askPrice1 + (ticks * tickSize)
                                 } else {
-                                     finalPrice = lastPrice * 1.02 // Fallback
+                                     finalPrice = lastPrice * 1.02
                                 }
                             }
 
-                            // If priceTick is known, round to tick
+                            // 取整到最小变动价位
                             if (priceTick > 0) {
                                 var ratio = Math.round(finalPrice / priceTick)
                                 finalPrice = ratio * priceTick
                             }
                             
-                            // Clamp to Limits (if available)
+                            // 涨跌停限制
                             if (upperLimit > 0 && finalPrice > upperLimit) finalPrice = upperLimit
                             if (lowerLimit > 0 && finalPrice < lowerLimit) finalPrice = lowerLimit
 
-                            // Final safety check
                             if (finalPrice <= 0.0001) finalPrice = 0.0
 
                             orderController.price = finalPrice

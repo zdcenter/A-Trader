@@ -125,11 +125,27 @@ void TraderHandler::confirmSettlement() {
 
 void TraderHandler::OnRspSettlementInfoConfirm(CThostFtdcSettlementInfoConfirmField *pConfirm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
     if (pRspInfo && pRspInfo->ErrorID == 0) {
-        std::cout << "[Td] Settlement Confirmed. Waiting 1s before QryInstrument (flow control)..." << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
-        qryAllInstruments(); 
+        // 统计缓存中当天有效的合约数量
+        int today_count = 0;
+        for (const auto& [id, meta] : instrument_cache_) {
+            if (std::string(meta.trading_day) == current_trading_day_) {
+                today_count++;
+            }
+        }
+
+        // 如果当天缓存足够（说明今天已经做过全量查询），直接跳过
+        if (today_count >= 100) {
+            std::cout << "[Td] Settlement Confirmed. Today's instrument cache valid (" 
+                      << today_count << "). Skipping full query. Querying BrokerParams..." << std::endl;
+            reqQueryBrokerTradingParams();
+        } else {
+            // 新交易日或首次启动，需要全量查询
+            std::cout << "[Td] Settlement Confirmed. Cache outdated (today:" << today_count 
+                      << "). Waiting 1s then querying ALL instruments..." << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+            qryAllInstruments();
+        }
     }
- 
 }
 
 void TraderHandler::qryAllInstruments() {
@@ -184,11 +200,48 @@ void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, C
     if (bIsLast) {
         std::cout << "[Td] All Instruments Loaded (" << instrument_cache_.size() << "). Querying Account..." << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Brief pause
-        qryAccount();
+        reqQueryBrokerTradingParams();
     }
 }
 
-void TraderHandler::qryAccount() {
+
+void TraderHandler::reqQueryBrokerTradingParams()
+{
+	CThostFtdcQryBrokerTradingParamsField req = { 0 };
+    std::memset(&req, 0, sizeof(req));
+    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
+    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
+    std::strncpy(req.CurrencyID, "CNY", sizeof(req.CurrencyID));
+
+	td_api_->ReqQryBrokerTradingParams(&req, 0);
+
+}
+
+void TraderHandler::OnRspQryBrokerTradingParams(CThostFtdcBrokerTradingParamsField* pBrokerTradingParams, CThostFtdcRspInfoField* pRspInfo, int nRequestID, bool bIsLast)
+{
+	if (pBrokerTradingParams)
+	{
+		// simnow MarginPriceType = 4 开仓价算保证金
+
+#ifdef _DEBUG
+		std::cout << "[Td] BrokerID:" << pBrokerTradingParams->BrokerID << std::endl
+			<< "保证金价格类型(MarginPriceType):" << pBrokerTradingParams->MarginPriceType << std::endl
+			<< "盈亏算法(Algorithm):" << pBrokerTradingParams->Algorithm << std::endl
+			<< "可用是否包含平仓盈利(AvailIncludeCloseProfit):" << pBrokerTradingParams->AvailIncludeCloseProfit << std::endl
+			<< "币种代码(CurrencyID):" << pBrokerTradingParams->CurrencyID << std::endl
+			<< "期权权利金价格类型(OptionRoyaltyPriceType):" << pBrokerTradingParams->OptionRoyaltyPriceType
+			<< std::endl;
+#endif
+
+	}
+	if (bIsLast)
+	{
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		reqQueryTradingAccount();
+	}
+}
+
+void TraderHandler::reqQueryTradingAccount() {
     CThostFtdcQryTradingAccountField req;
     std::memset(&req, 0, sizeof(req));
     std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
@@ -213,16 +266,135 @@ void TraderHandler::OnRspQryTradingAccount(CThostFtdcTradingAccountField *pAccou
     }
     if (bIsLast) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        qryPosition();
+        reqQueryPosition();
     }
 }
 
-// ... (qryPosition, OnRspQryInvestorPosition, qryInstrument 等保持不变) ...
+
+void TraderHandler::reqQueryPosition() {
+    CThostFtdcQryInvestorPositionField req;
+    std::memset(&req, 0, sizeof(req));
+    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
+    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
+    td_api_->ReqQryInvestorPosition(&req, 0);
+}
+
+void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pPos, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pPos && pPos->Position > 0) {
+        // [修正] 汇总查询不再更新持仓缓存，完全依赖持仓明细 (PositionDetail)
+        // 仅利用汇总查询的结果来触发费率查询，确保我们要交易的合约费率已加载
+        queueRateQuery(pPos->InstrumentID);
+    }
+
+    if (bIsLast) {
+        std::cout << "[Td] Position Query Completed. Total Cached: " << m_posManager.GetAllPositions().size() << std::endl;
+        std::cout << "[Td] Waiting for PositionDetail query to recalculate accurate positions..." << std::endl;
+        
+        // 不在这里推送！等待 PositionDetail 查询完成后，基于明细重新计算并推送
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        qryPositionDetail();
+    }
+}
+
+
+void TraderHandler::qryPositionDetail() {
+    // Clear old state before reloading (Avoid doubling positions on retry)
+    m_posManager.Clear();
+    
+    CThostFtdcQryInvestorPositionDetailField req;
+    std::memset(&req, 0, sizeof(req));
+    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
+    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
+    std::cout << "[Td] Querying Investor Position Detail for Manager..." << std::endl;
+    td_api_->ReqQryInvestorPositionDetail(&req, 0);
+}
+
+void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDetailField *pDetail, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) {
+        std::cerr << "[Td Error] Qry Position Detail Failed: " << pRspInfo->ErrorMsg << std::endl;
+        return;
+    }
+
+    if (pDetail) {
+
+#ifdef _DEBUG
+		std::cerr << "[Td] 合约代码：" << pDetail->InstrumentID << std::endl;
+		std::cerr << "[Td] 经纪公司代码(BrokerID)：\t" << pDetail->BrokerID << std::endl;
+		std::cerr << "[Td] 投资者代码(InvestorID)：\t" << pDetail->InvestorID << std::endl;
+		std::cerr << "[Td] 投机套保标记(HedgeFlag)：\t" << pDetail->HedgeFlag << std::endl;
+		std::cerr << "[Td] 买卖(Direction)：\t" << pDetail->Direction << std::endl;
+		std::cerr << "[Td] 成交类型(TradeType)：\t" << pDetail->TradeType << std::endl;
+		std::cerr << "[Td] 开仓日期(OpenDate)：\t" << pDetail->OpenDate << std::endl;
+		std::cerr << "[Td] 交易日(TradingDay)：\t" << pDetail->TradingDay << std::endl;
+		std::cerr << "[Td] 成交编号(TradeID)：\t" << pDetail->TradeID << std::endl;
+		std::cerr << "[Td] 数量(Volume)：\t" << pDetail->Volume << std::endl;
+		std::cerr << "[Td] 平仓量(CloseVolume)：\t" << pDetail->CloseVolume << std::endl;
+		std::cerr << "[Td] 开仓价(OpenPrice)：\t" << pDetail->OpenPrice << std::endl;
+		std::cerr << "[Td] 逐日盯市平仓盈亏(CloseProfitByDate)：\t" << pDetail->CloseProfitByDate << std::endl;
+		std::cerr << "[Td] 逐笔对冲平仓盈亏(CloseProfitByTrade)：\t" << pDetail->CloseProfitByTrade << std::endl;
+		std::cerr << "[Td] 逐日盯市持仓盈亏(PositionProfitByDate)：\t" << pDetail->PositionProfitByDate << std::endl;
+		std::cerr << "[Td] 逐笔对冲持仓盈亏(PositionProfitByTrade：\t" << pDetail->PositionProfitByTrade << std::endl;
+		std::cerr << "[Td] 投资者保证金(Margin)：\t" << pDetail->Margin << std::endl;
+		std::cerr << "[Td] 交易所保证金(ExchMargin)：\t" << pDetail->ExchMargin << std::endl;
+		std::cerr << "[Td] 保证金率(MarginRateByMoney)：\t" << pDetail->MarginRateByMoney << std::endl;
+		std::cerr << "[Td] 昨结算价(LastSettlementPrice)：\t" << pDetail->LastSettlementPrice << std::endl;
+		std::cerr << "[Td] 结算价(SettlementPrice)：\t" << pDetail->SettlementPrice << std::endl;
+
+#endif // _DEBUG
+        // 过滤已平仓明细 (CTP 有时会推送 Volume=0 的记录)
+        if (pDetail->Volume > 0) {
+            
+            // --- PositionManager Integration ---
+            // Construct a synthetic TradeField to feed into PositionManager
+            CThostFtdcTradeField trade = {0};
+            // 合约ID
+            std::strncpy(trade.InstrumentID, pDetail->InstrumentID, sizeof(trade.InstrumentID));
+            // 交易所ID
+            std::strncpy(trade.ExchangeID, pDetail->ExchangeID, sizeof(trade.ExchangeID));
+            // 成交ID
+            std::strncpy(trade.TradeID, pDetail->TradeID, sizeof(trade.TradeID));
+            // 成交日期
+            std::strncpy(trade.TradeDate, pDetail->OpenDate, sizeof(trade.TradeDate));
+            // 开仓价
+            trade.Price = pDetail->OpenPrice;
+            // 持仓量
+            trade.Volume = pDetail->Volume;
+            
+            // Map Direction
+            // CTP Detail uses '0'(Buy)/'1'(Sell)
+            if (pDetail->Direction == THOST_FTDC_D_Buy) { //'0'
+                 trade.Direction = THOST_FTDC_D_Buy; //'0'
+            } else {
+                 trade.Direction = THOST_FTDC_D_Sell; //'1'
+            }
+            trade.OffsetFlag = THOST_FTDC_OF_Open; 
+            
+            // Push to Manager (FIFO 队列会自动根据 trading_day_ 判断今/昨仓)
+            m_posManager.UpdateFromTrade(trade);
+            // -----------------------------------
+        }
+    }
+
+    if (bIsLast) {
+        std::cout << "[Td] Position Detail Query Completed. Manager synced. Current Positions:" << std::endl;
+        
+        for (const auto& [id, pos] : m_posManager.GetAllPositions()) {
+            if (pos->LongPosition > 0) 
+                 std::cout << "  - [L] " << id << ": " << pos->LongPosition << " (Td:" << pos->LongTodayPosition << ", Yd:" << pos->LongYdPosition << ") Cost:" << pos->LongPositionCost << std::endl;
+            if (pos->ShortPosition > 0)
+                 std::cout << "  - [S] " << id << ": " << pos->ShortPosition << " (Td:" << pos->ShortTodayPosition << ", Yd:" << pos->ShortYdPosition << ") Cost:" << pos->ShortPositionCost << std::endl;
+        }
+
+        // 不需要再重新计算了，PositionManager 已经在实时计算了
+        // 可以选择在这里推送一次全量快照
+        pushCachedPositions();
+    }
+}
 
 void TraderHandler::pushCachedPositions() {
     // std::lock_guard<std::mutex> lock(position_mtx_); // REMOVED
     // 获取 PositionManager 的全量持仓
-    auto& positions = m_posManager.GetAllPositions();
+    auto positions = m_posManager.GetAllPositions();
     
     std::cout << "[Td] Pushing cached state (Account + " << positions.size() << " Instruments)..." << std::endl;
     
@@ -240,6 +412,13 @@ void TraderHandler::pushCachedPositions() {
     for (const auto& [instID, posPtr] : positions) {
         if (!posPtr) continue;
         
+        // 查找合约乘数
+        int mult = 1;
+        if (instrument_cache_.count(instID)) {
+            mult = instrument_cache_[instID].volume_multiple;
+            if (mult <= 0) mult = 1;
+        }
+
         // --- 多头 ---
         if (posPtr->LongPosition > 0 || posPtr->LongFrozenMargin > 0) {
             PositionData data = {0};
@@ -250,7 +429,11 @@ void TraderHandler::pushCachedPositions() {
             data.today_position = posPtr->LongTodayPosition;
             data.yd_position = posPtr->LongYdPosition;
             data.position_cost = posPtr->LongPositionCost; 
-            data.pos_profit = posPtr->LongPositionProfit; // Use pos_profit instead of percent
+            data.open_cost = posPtr->LongOpenCost;
+            data.pos_profit = posPtr->LongPositionProfit;
+            data.close_profit = posPtr->LongCloseProfit;
+            data.margin = posPtr->Margin;  // TODO: 分多空保证金
+            data.volume_multiple = mult;
 
             pub_.publishPosition(data, seq);
         }
@@ -265,7 +448,11 @@ void TraderHandler::pushCachedPositions() {
             data.today_position = posPtr->ShortTodayPosition;
             data.yd_position = posPtr->ShortYdPosition;
             data.position_cost = posPtr->ShortPositionCost;
+            data.open_cost = posPtr->ShortOpenCost;
             data.pos_profit = posPtr->ShortPositionProfit;
+            data.close_profit = posPtr->ShortCloseProfit;
+            data.margin = posPtr->Margin;  // TODO: 分多空保证金
+            data.volume_multiple = mult;
 
             pub_.publishPosition(data, seq);
         }
@@ -300,9 +487,6 @@ void TraderHandler::pushCachedInstruments() {
     for (const auto& [id, data] : instrument_cache_) {
         pub_.publishInstrument(data);
     }
-    for (const auto& [id, data] : instrument_cache_) {
-        pub_.publishInstrument(data);
-    }
 }
 
 bool TraderHandler::getInstrumentMeta(const std::string& id, InstrumentMeta& out_data) {
@@ -312,32 +496,6 @@ bool TraderHandler::getInstrumentMeta(const std::string& id, InstrumentMeta& out
     }
     return false;
 }
-
-void TraderHandler::qryPosition() {
-    CThostFtdcQryInvestorPositionField req;
-    std::memset(&req, 0, sizeof(req));
-    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
-    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
-    td_api_->ReqQryInvestorPosition(&req, 0);
-}
-
-void TraderHandler::OnRspQryInvestorPosition(CThostFtdcInvestorPositionField *pPos, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
-    if (pPos && pPos->Position > 0) {
-        // [修正] 汇总查询不再更新持仓缓存，完全依赖持仓明细 (PositionDetail)
-        // 仅利用汇总查询的结果来触发费率查询，确保我们要交易的合约费率已加载
-        queueRateQuery(pPos->InstrumentID);
-    }
-
-    if (bIsLast) {
-        std::cout << "[Td] Position Query Completed. Total Cached: " << m_posManager.GetAllPositions().size() << std::endl;
-        std::cout << "[Td] Waiting for PositionDetail query to recalculate accurate positions..." << std::endl;
-        
-        // 不在这里推送！等待 PositionDetail 查询完成后，基于明细重新计算并推送
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        qryPositionDetail();
-    }
-}
-
 
 
 void TraderHandler::qryMarginRate(const std::string& instrument_id) {
@@ -466,68 +624,6 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
     }
 }
 
-void TraderHandler::qryPositionDetail() {
-    // Clear old state before reloading (Avoid doubling positions on retry)
-    m_posManager.Clear();
-    
-    CThostFtdcQryInvestorPositionDetailField req;
-    std::memset(&req, 0, sizeof(req));
-    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
-    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
-    std::cout << "[Td] Querying Investor Position Detail for Manager..." << std::endl;
-    td_api_->ReqQryInvestorPositionDetail(&req, 0);
-}
-
-void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDetailField *pDetail, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
-    if (pRspInfo && pRspInfo->ErrorID != 0) {
-        std::cerr << "[Td Error] Qry Position Detail Failed: " << pRspInfo->ErrorMsg << std::endl;
-        return;
-    }
-
-    if (pDetail) {
-        // 过滤已平仓明细 (CTP 有时会推送 Volume=0 的记录)
-        if (pDetail->Volume > 0) {
-            
-            // --- PositionManager Integration ---
-            // Construct a synthetic TradeField to feed into PositionManager
-            CThostFtdcTradeField trade = {0};
-            std::strncpy(trade.InstrumentID, pDetail->InstrumentID, sizeof(trade.InstrumentID));
-            std::strncpy(trade.ExchangeID, pDetail->ExchangeID, sizeof(trade.ExchangeID));
-            std::strncpy(trade.TradeID, pDetail->TradeID, sizeof(trade.TradeID));
-            std::strncpy(trade.TradeDate, pDetail->OpenDate, sizeof(trade.TradeDate));
-            trade.Price = pDetail->OpenPrice;
-            trade.Volume = pDetail->Volume;
-            
-            // Map Direction
-            // CTP Detail uses '0'(Buy)/'1'(Sell), NOT '2'(Long)/'3'(Short)
-            if (pDetail->Direction == THOST_FTDC_D_Buy) { //'0'
-                 trade.Direction = THOST_FTDC_D_Buy; //'0'
-            } else {
-                 trade.Direction = THOST_FTDC_D_Sell; //'1'
-            }
-            trade.OffsetFlag = THOST_FTDC_OF_Open; 
-            
-            // Push to Manager (FIFO 队列会自动根据 trading_day_ 判断今/昨仓)
-            m_posManager.UpdateFromTrade(trade);
-            // -----------------------------------
-        }
-    }
-
-    if (bIsLast) {
-        std::cout << "[Td] Position Detail Query Completed. Manager synced. Current Positions:" << std::endl;
-        
-        for (const auto& [id, pos] : m_posManager.GetAllPositions()) {
-            if (pos->LongPosition > 0) 
-                 std::cout << "  - [L] " << id << ": " << pos->LongPosition << " (Td:" << pos->LongTodayPosition << ", Yd:" << pos->LongYdPosition << ") Cost:" << pos->LongPositionCost << std::endl;
-            if (pos->ShortPosition > 0)
-                 std::cout << "  - [S] " << id << ": " << pos->ShortPosition << " (Td:" << pos->ShortTodayPosition << ", Yd:" << pos->ShortYdPosition << ") Cost:" << pos->ShortPositionCost << std::endl;
-        }
-
-        // 不需要再重新计算了，PositionManager 已经在实时计算了
-        // 可以选择在这里推送一次全量快照
-        pushCachedPositions();
-    }
-}
 
 int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, char priceType, const std::string& strategy_id) {
     CThostFtdcInputOrderField req;
@@ -752,11 +848,8 @@ void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
 void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
     if (pTrade) {
         std::cout << "[Td] Trade Update: " << pTrade->TradeID << " Price: " << pTrade->Price << std::endl;
-        
-        // --- PositionManager Integration ---
         // --- PositionManager Integration ---
         double realized_pnl = m_posManager.UpdateFromTrade(*pTrade);
-        // -----------------------------------
         // -----------------------------------
 
         // 查找 strategy_id
@@ -851,7 +944,7 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
         
         // 实时更新本地缓存
         updateLocalPosition(pTrade);
-        updateLocalAccount(pTrade);
+        updateLocalAccount(pTrade, commission, close_profit);
     }
 }
 
@@ -860,7 +953,14 @@ void TraderHandler::updateLocalPosition(CThostFtdcTradeField *pTrade) {
     auto posPtr = m_posManager.GetPosition(pTrade->InstrumentID);
     if (!posPtr) return;
 
-    // Determine affected side
+    // 查合约乘数
+    int mult = 1;
+    if (instrument_cache_.count(pTrade->InstrumentID)) {
+        mult = instrument_cache_[pTrade->InstrumentID].volume_multiple;
+        if (mult <= 0) mult = 1;
+    }
+
+    // 判断受影响的方向
     bool checkLong = false;
     bool checkShort = false;
 
@@ -881,9 +981,12 @@ void TraderHandler::updateLocalPosition(CThostFtdcTradeField *pTrade) {
         data.today_position = posPtr->LongTodayPosition;
         data.yd_position = posPtr->LongYdPosition;
         data.position_cost = posPtr->LongPositionCost;
+        data.open_cost = posPtr->LongOpenCost;
         data.pos_profit = posPtr->LongPositionProfit;
+        data.close_profit = posPtr->LongCloseProfit;
+        data.margin = posPtr->Margin;
+        data.volume_multiple = mult;
         
-        // Sequence is optional for high freq push
         pub_.publishPosition(data);
     }
 
@@ -896,22 +999,23 @@ void TraderHandler::updateLocalPosition(CThostFtdcTradeField *pTrade) {
         data.today_position = posPtr->ShortTodayPosition;
         data.yd_position = posPtr->ShortYdPosition;
         data.position_cost = posPtr->ShortPositionCost;
+        data.open_cost = posPtr->ShortOpenCost;
         data.pos_profit = posPtr->ShortPositionProfit;
+        data.close_profit = posPtr->ShortCloseProfit;
+        data.margin = posPtr->Margin;
+        data.volume_multiple = mult;
         
         pub_.publishPosition(data);
     }
 }
 
-void TraderHandler::updateLocalAccount(CThostFtdcTradeField *pTrade) {
-    // 资金更新非常复杂(涉及保证金冻结释放、手续费扣除、平仓盈亏结算)，
-    // 完全准确的推算很难。这里仅做“手续费扣除”和“保证金估算”的简单演示。
-    // 生产环境建议：成交后还是触发一次 qryAccount 做校准，或者接受几秒的资金延迟。
-    
-    // 简单扣除手续费 (假设万分之1)
-    double commission = pTrade->Price * pTrade->Volume * 10 * 0.0001; 
+void TraderHandler::updateLocalAccount(CThostFtdcTradeField *pTrade, double commission, double realized_pnl) {
+    // 使用实际计算的手续费和平仓盈亏更新本地资金缓存
+    // 注意：这是近似值，精确值需要通过 reqQueryTradingAccount 校准
     account_cache_.commission += commission;
-    account_cache_.balance -= commission;
-    account_cache_.available -= commission;
+    account_cache_.close_profit += realized_pnl;
+    account_cache_.balance += realized_pnl - commission;
+    account_cache_.available += realized_pnl - commission;
     
     pub_.publishAccount(account_cache_);
 }
@@ -1016,12 +1120,6 @@ void TraderHandler::loadDayOrdersFromDB() {
     }
     pushCachedOrdersAndTrades();
 }
-
-void TraderHandler::restorePositionDetails() {
-    // Deprecated by qryPositionDetail.
-    // Left empty.
-}
-
 
 
 /**
