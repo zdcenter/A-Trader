@@ -75,22 +75,9 @@ void MarketModel::updateTick(const QJsonObject& j) {
         
         if (id.isEmpty()) return;
 
-        int row = -1;
-        if (_instrument_to_index.contains(id)) {
-            row = _instrument_to_index[id];
-        } else {
-             beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
-             _instrument_to_index[id] = _market_data.count();
-             MarketItem newItem;
-             std::memset(&newItem.data, 0, sizeof(TickData));
-             newItem.instrumentId = id;
-             strncpy(newItem.data.instrument_id, id.toStdString().c_str(), sizeof(newItem.data.instrument_id)-1);
-             newItem.preClose = 0.0; newItem.change = 0.0; newItem.changePercent = 0.0; newItem.updateTime = "--";
-
-             _market_data.append(newItem);
-             row = _market_data.count() - 1;
-             endInsertRows();
-        }
+        // 只更新已存在的合约，不自动添加（避免全量行情灌入列表）
+        if (!_instrument_to_index.contains(id)) return;
+        int row = _instrument_to_index[id];
         
         if(row < 0 || row >= _market_data.size()) return;
         
@@ -150,34 +137,10 @@ void MarketModel::updateTick(const QJsonObject& j) {
 }
 
 void MarketModel::handleInstrument(const QJsonObject& j) {
-    try {
-        QString id;
-        if(j.contains("instrument_id")) id = j["instrument_id"].toString();
-        else if(j.contains("id")) id = j["id"].toString();
-        
-        if (id.isEmpty()) return;
-        
-        if (!_instrument_to_index.contains(id)) {
-            qDebug() << "[MarketModel] Adding new instrument:" << id;
-            beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
-            _instrument_to_index[id] = _market_data.count();
-            
-            MarketItem item;
-            std::memset(&item.data, 0, sizeof(TickData));
-            item.instrumentId = id;
-            strncpy(item.data.instrument_id, id.toStdString().c_str(), sizeof(item.data.instrument_id)-1);
-            // Default init
-            item.preClose = 0; item.change = 0; item.changePercent = 0; item.updateTime = "--";
-            
-            _market_data.append(item);
-            endInsertRows();
-            qDebug() << "[MarketModel] Instrument added successfully";
-        }
-    } catch (const std::exception& e) {
-        qDebug() << "[MarketModel] Exception in handleInstrument:" << e.what();
-    } catch (...) {
-        qDebug() << "[MarketModel] Unknown exception in handleInstrument";
-    }
+    // 合约元数据同步，不自动向行情列表添加行
+    // 只记录元数据，供已存在的行引用（如涨停价、合约乘数等）
+    // 行情列表的添加只通过 addInstrument() 控制
+    Q_UNUSED(j);
 }
 
 void MarketModel::addInstrument(const QString& instrumentId) {
@@ -346,46 +309,10 @@ QVariantMap MarketModel::getMarketData(const QString& instrumentId) const {
 
 // 二进制行情更新 (极速路径)
 void MarketModel::updateTickBinary(const TickData& data) {
-    // 1. 将 C 风格字符串转为 QString (fromLatin1 效率最高，假设ID是ASCII)
     QString id = QString::fromLatin1(data.instrument_id);
     
-    // 2. 查找该合约是否已存在于列表中
-    if (!_instrument_to_index.contains(id)) {
-        // [新增逻辑] 如果不存在，则插入新行
-        
-        // 通知 Qt 视图(View) 即将通过 Model 插入一行数据
-        // 参数: 父节点(无), 起始行号, 结束行号
-        beginInsertRows(QModelIndex(), _market_data.count(), _market_data.count());
-        
-        // 更新索引映射: ID -> 行号
-        _instrument_to_index[id] = _market_data.count();
-        
-        MarketItem newItem;
-        newItem.data = data; // 结构体直接拷贝
-        newItem.instrumentId = id;
-        
-        // 初始化昨收价 (用于计算涨跌)
-        double basePrice = data.pre_settlement_price;
-        if (basePrice < 0.0001) basePrice = data.pre_close_price;
-        newItem.preClose = basePrice;
-        
-        // 计算涨跌额和涨跌幅 (UI 显示专用)
-        if (basePrice > 0.0001) {
-            newItem.change = data.last_price - basePrice;
-            newItem.changePercent = (newItem.change / basePrice * 100.0);
-        } else {
-            newItem.change = 0.0; newItem.changePercent = 0.0;
-        }
-        
-        newItem.updateTime = QString::fromLatin1(data.update_time);
-
-        // 添加到数据容器
-        _market_data.append(newItem);
-        
-        // 通知 Qt 视图插入完成，界面会自动刷新新增的行
-        endInsertRows();
-        return;
-    }
+    // 只更新已存在的合约，不自动添加
+    if (!_instrument_to_index.contains(id)) return;
 
     // [更新逻辑] 如果已存在，则更新对应行的数据
     int row = _instrument_to_index[id];

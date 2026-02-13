@@ -194,6 +194,11 @@ void PositionModel::updatePosition(const QJsonObject& j) {
                 _position_data.append(item);
                 _instrument_to_indices[id].append(_position_data.count() - 1);
                 endInsertRows();
+                
+                // 该合约首次出现持仓时，通知行情列表自动添加并订阅
+                if (_instrument_to_indices[id].size() == 1) {
+                    emit instrumentNeeded(id);
+                }
             }
         }
         

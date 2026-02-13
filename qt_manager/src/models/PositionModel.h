@@ -60,6 +60,7 @@ public slots:
 
 signals:
     void totalProfitChanged(double totalProfit);
+    void instrumentNeeded(const QString& instrumentId);  // 持仓合约需要订阅行情
 
 private:
     void recalcTotalProfit();

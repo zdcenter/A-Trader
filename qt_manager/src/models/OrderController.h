@@ -127,6 +127,11 @@ public slots:
     void queryStrategies(); // Query available strategies
     void modifyConditionOrder(const QString& requestId, double triggerPrice, double limitPrice, int volume); // 修改条件单
     Q_INVOKABLE double getInstrumentPriceTick(const QString& instrumentId) const; // 获取合约最小变动价位
+    
+    // 自动补全：模糊搜索合约（ID 或名称），返回最多 maxResults 条匹配结果
+    Q_INVOKABLE QVariantList searchInstruments(const QString& keyword, int maxResults = 10) const;
+    // 精确验证：合约 ID 是否存在于 instrument_dict
+    Q_INVOKABLE bool isValidInstrument(const QString& instrumentId) const;
 
 signals:
     void orderParamsChanged();

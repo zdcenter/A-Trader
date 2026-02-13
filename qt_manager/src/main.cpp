@@ -158,6 +158,11 @@ int main(int argc, char *argv[]) {
 
     // 连接持仓总盈亏到资金面板
     QObject::connect(positionModel, &QuantLabs::PositionModel::totalProfitChanged, accountInfo, &QuantLabs::AccountInfo::setFloatingProfit);
+    
+    // 持仓合约自动添加到行情列表并订阅
+    QObject::connect(positionModel, &QuantLabs::PositionModel::instrumentNeeded, marketModel, &QuantLabs::MarketModel::addInstrument);
+    QObject::connect(positionModel, &QuantLabs::PositionModel::instrumentNeeded, orderController, &QuantLabs::OrderController::subscribe);
+    
     QObject::connect(worker, &QuantLabs::ZmqWorker::conditionOrderReceived, orderController, &QuantLabs::OrderController::onConditionOrderReturn);
     
     // Cleanup Market Worker

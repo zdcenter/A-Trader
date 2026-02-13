@@ -101,6 +101,33 @@ FocusScope {
         console.log("💾 已保存列配置")
     }
     
+    // 执行订阅的统一函数（在 root 级别定义，确保所有子组件都能访问）
+    function doSubscribe(instrumentId) {
+        if (!instrumentId || instrumentId === "") return
+        
+        // 检查是否已存在
+        if (marketModel && marketModel.hasInstrument(instrumentId)) {
+            console.log("ℹ️ 合约已存在:", instrumentId)
+            if (orderController) orderController.instrumentId = instrumentId
+            subInput.text = ""
+            suggestionPopup.close()
+            return
+        }
+        
+        // 发送订阅指令
+        if (orderController) {
+            var cmd = JSON.stringify({ "type": "SUBSCRIBE", "id": instrumentId })
+            console.log("📡 订阅:", instrumentId)
+            orderController.sendCommand(cmd)
+        }
+        
+        // 立即添加到行情列表
+        if (marketModel) marketModel.addInstrument(instrumentId)
+        
+        subInput.text = ""
+        suggestionPopup.close()
+    }
+    
     // 保存订阅列表
     function saveSubscribedInstruments() {
         if (!marketModel) return
@@ -287,43 +314,163 @@ FocusScope {
                 
                 Item { Layout.fillWidth: true }
                 
-                TextField {
-                    id: subInput
-                    placeholderText: "代码..."
-                    font.pixelSize: 13
-                    color: appWindow.currentTheme.text
-                    background: Rectangle {
-                        color: appWindow.currentTheme.bg
-                        radius: 4
-                        border.color: appWindow.currentTheme.border
-                    }
-                    Layout.preferredWidth: 100
+                // 合约搜索输入框（带自动补全）
+                Item {
+                    Layout.preferredWidth: 160
                     Layout.preferredHeight: 28
                     
-                    onAccepted: {
-                        if (text.trim() !== "") {
-                            var id = text.trim()
-                            
-                            // 1. 直接通过 Controller 发送订阅指令
-                            if (orderController) {
-                                var cmd = JSON.stringify({
-                                    "type": "SUBSCRIBE",
-                                    "id": id
-                                })
-                                console.log("📡 发送订阅指令:", cmd)
-                                orderController.sendCommand(cmd)
+                    TextField {
+                        id: subInput
+                        anchors.fill: parent
+                        placeholderText: "输入合约..."
+                        font.pixelSize: 13
+                        color: appWindow.currentTheme.text
+                        background: Rectangle {
+                            color: appWindow.currentTheme.bg
+                            radius: 4
+                            border.color: subInput.activeFocus ? appWindow.currentTheme.accent : appWindow.currentTheme.border
+                        }
+                        
+                        // 输入时触发搜索
+                        onTextChanged: {
+                            if (text.trim().length >= 1 && orderController) {
+                                var results = orderController.searchInstruments(text.trim(), 12)
+                                suggestionModel.clear()
+                                for (var i = 0; i < results.length; i++) {
+                                    suggestionModel.append(results[i])
+                                }
+                                if (suggestionModel.count > 0) suggestionPopup.open(); else suggestionPopup.close()
                             } else {
-                                console.error("❌ orderController 未连接，无法订阅")
+                                suggestionPopup.close()
                             }
+                        }
+                        
+                        onAccepted: {
+                            var id = text.trim()
+                            if (id === "") return
                             
-                            // 2. 立即在界面上添加占位行
-                            if (marketModel) {
-                                marketModel.addInstrument(id)
+                            // 优先使用上下键选中的条目
+                            if (suggestionPopup.opened && suggestionList.currentIndex >= 0 && suggestionModel.count > 0) {
+                                var selected = suggestionModel.get(suggestionList.currentIndex)
+                                root.doSubscribe(selected.id)
+                            } else if (orderController && orderController.isValidInstrument(id)) {
+                                // 精确匹配
+                                root.doSubscribe(id)
+                            } else if (suggestionModel.count > 0) {
+                                // 自动选中第一个匹配结果
+                                root.doSubscribe(suggestionModel.get(0).id)
+                            } else {
+                                console.log("⚠️ 无效合约:", id)
                             }
-                            text = ""
+                        }
+                        
+                        // Esc 关闭下拉
+                        Keys.onEscapePressed: {
+                            suggestionPopup.close()
+                            subInput.focus = false
+                        }
+                        
+                        // 上下键导航
+                        Keys.onDownPressed: {
+                            if (suggestionPopup.opened && suggestionList.count > 0) {
+                                suggestionList.currentIndex = Math.min(suggestionList.currentIndex + 1, suggestionList.count - 1)
+                            }
+                        }
+                        Keys.onUpPressed: {
+                            if (suggestionPopup.opened && suggestionList.count > 0) {
+                                suggestionList.currentIndex = Math.max(suggestionList.currentIndex - 1, 0)
+                            }
+                        }
+                        // Tab 选中当前高亮项
+                        Keys.onTabPressed: {
+                            if (suggestionPopup.opened && suggestionList.currentIndex >= 0) {
+                                var item = suggestionModel.get(suggestionList.currentIndex)
+                                root.doSubscribe(item.id)
+                            }
+                        }
+                    }
+                    
+                    // 自动补全下拉列表
+                    ListModel { id: suggestionModel }
+                    
+                    Popup {
+                        id: suggestionPopup
+                        x: 0
+                        y: subInput.height + 2
+                        width: 280
+                        height: Math.min(suggestionModel.count * 30 + 8, 368)
+                        padding: 2
+                        closePolicy: Popup.NoAutoClose
+                        
+                        background: Rectangle {
+                            color: appWindow.currentTheme.surface
+                            border.color: appWindow.currentTheme.accent
+                            border.width: 1
+                            radius: 4
+                        }
+                        
+                        ListView {
+                            id: suggestionList
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            model: suggestionModel
+                            currentIndex: 0
+                            clip: true
+                            
+                            delegate: Rectangle {
+                                width: suggestionList.width
+                                height: 30
+                                color: index === suggestionList.currentIndex ? appWindow.currentTheme.accent : 
+                                       mouseAreaSug.containsMouse ? appWindow.currentTheme.surfaceLight : "transparent"
+                                radius: 3
+                                
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    
+                                    // 合约ID（等宽字体高亮）
+                                    Text {
+                                        text: model.id
+                                        color: index === suggestionList.currentIndex ? "white" : appWindow.currentTheme.text
+                                        font.family: "Consolas"
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        width: 80
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    // 合约名称
+                                    Text {
+                                        text: model.name
+                                        color: index === suggestionList.currentIndex ? "#dddddd" : appWindow.currentTheme.textSec
+                                        font.pixelSize: 12
+                                        width: 120
+                                        elide: Text.ElideRight
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    // 交易所
+                                    Text {
+                                        text: model.exchange
+                                        color: index === suggestionList.currentIndex ? "#bbbbbb" : "#888888"
+                                        font.pixelSize: 11
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                
+                                MouseArea {
+                                    id: mouseAreaSug
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: root.doSubscribe(model.id)
+                                    onEntered: suggestionList.currentIndex = index
+                                }
+                            }
                         }
                     }
                 }
+                
+                // doSubscribe 已提升到 root 级别
                 
                 // 列配置按钮
                 Button {

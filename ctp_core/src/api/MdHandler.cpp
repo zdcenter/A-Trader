@@ -147,14 +147,6 @@ void MdHandler::OnRtnDepthMarketData(CThostFtdcDepthMarketDataField *pData) {
     pub_.publishTickBinary(tick);
 }
 
-void MdHandler::OnRspSubMarketData(CThostFtdcSpecificInstrumentField *pSpecificInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
-    if (pRspInfo && pRspInfo->ErrorID != 0) {
-        std::cerr << "[Md] Sub Error: " << pRspInfo->ErrorMsg << std::endl;
-    } else if (pSpecificInstrument) {
-        std::cout << "[Md] Subscribed confirmed: " << pSpecificInstrument->InstrumentID << std::endl;
-    }
-}
-
 void MdHandler::subscribe() {
     if (md_api_ && !contracts_.empty()) {
         std::vector<char*> ids;
@@ -166,7 +158,13 @@ void MdHandler::subscribe() {
     }
 }
 
-
+void MdHandler::OnRspSubMarketData(CThostFtdcSpecificInstrumentField *pSpecificInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    if (pRspInfo && pRspInfo->ErrorID != 0) {
+        std::cerr << "[Md] Sub Error: " << pRspInfo->ErrorMsg << std::endl;
+    } else if (pSpecificInstrument) {
+        std::cout << "[Md] Subscribed confirmed: " << pSpecificInstrument->InstrumentID << std::endl;
+    }
+}
 
 void MdHandler::subscribe(const std::string& instrument) {
     if (md_api_) {

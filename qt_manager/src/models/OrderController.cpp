@@ -596,4 +596,43 @@ double OrderController::getInstrumentPriceTick(const QString& instrumentId) cons
     return (tick < 1e-6) ? 1.0 : tick;
 }
 
+QVariantList OrderController::searchInstruments(const QString& keyword, int maxResults) const {
+    QVariantList results;
+    if (keyword.isEmpty()) return results;
+    
+    QString upper = keyword.toUpper();
+    
+    // 遍历合约字典，匹配 ID 前缀或名称包含关键字
+    for (auto it = _instrument_dict.begin(); it != _instrument_dict.end(); ++it) {
+        if (results.size() >= maxResults) break;
+        
+        const QString& id = it.key();
+        QString name = QString::fromUtf8(it.value().instrument_name);
+        QString exchange = QString::fromLatin1(it.value().exchange_id);
+        
+        // 大小写不敏感：ID 前缀匹配 或 名称包含
+        if (id.toUpper().startsWith(upper) || name.contains(keyword)) {
+            QVariantMap item;
+            item["id"] = id;
+            item["name"] = name;
+            item["exchange"] = exchange;
+            results.append(item);
+        }
+    }
+    
+    // 按合约 ID 排序，方便阅读
+    std::sort(results.begin(), results.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap()["id"].toString() < b.toMap()["id"].toString();
+    });
+    
+    // 截断到 maxResults
+    while (results.size() > maxResults) results.removeLast();
+    
+    return results;
+}
+
+bool OrderController::isValidInstrument(const QString& instrumentId) const {
+    return _instrument_dict.contains(instrumentId);
+}
+
 } // namespace QuantLabs
