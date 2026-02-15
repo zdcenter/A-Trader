@@ -46,9 +46,13 @@ public:
 
 signals:
     void tradeSoundTriggered();
+    void summaryChanged();  // 新成交到来时通知合计视图刷新
 
 public slots:
     void onTradeReceived(const QJsonObject& json);
+
+    // 按「合约+方向+开平」分组统计，返回 QVariantList 供 QML ListModel 使用
+    Q_INVOKABLE QVariantList getTradeSummary() const;
 
 private:
     std::vector<TradeItem> _trades;

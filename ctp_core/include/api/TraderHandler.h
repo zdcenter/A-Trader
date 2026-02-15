@@ -57,7 +57,12 @@ public:
     int insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, char priceType = '2', const std::string& strategy_id = "");
     
     // 撤单 Action
+    // 撤单 Action
     int cancelOrder(const std::string& instrument, const std::string& orderSysID, const std::string& orderRef, const std::string& exchangeID, int frontID, int sessionID);
+
+    // Global Strategy Setting
+    void setCurrentStrategy(const std::string& strategy_id);
+    std::string getCurrentStrategy() const;
 
     // --- SPI 回调 ---
     void OnFrontConnected() override;
@@ -142,6 +147,7 @@ private:
     std::mutex req_mtx_;
     
     // Order Ref to Strategy ID mapping
+    std::string current_strategy_id_; // Default/Active Strategy
     std::map<std::string, std::string> order_strategy_map_;
     std::mutex order_strategy_mtx_;
     

@@ -519,4 +519,28 @@ ApplicationWindow {
         property var tradeSettings: globalTradeSettings
         soundSettings: soundSettings
     }
+    
+    // 快捷条件单弹窗
+    ConditionOrderDialog {
+        id: conditionDlg
+        orderController: AppOrderController
+    }
+    
+    // 全局快捷键: 空格键呼出条件单
+    Shortcut {
+        sequence: "Space"
+        context: Qt.ApplicationShortcut // 全局有效，即使焦点在其他地方
+        onActivated: {
+            if (AppOrderController.instrumentId && AppOrderController.lastPrice > 0) {
+                conditionDlg.open()
+            }
+        }
+    }
+    
+    // 备用快捷键 F2
+    Shortcut {
+        sequence: "F2"
+        context: Qt.ApplicationShortcut
+        onActivated: conditionDlg.open()
+    }
 }

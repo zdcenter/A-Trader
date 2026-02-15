@@ -149,7 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_strategy_type ON tb_strategies(strategy_type);
 -- Aligning with DBManager.cpp implementation
 CREATE TABLE IF NOT EXISTS tb_condition_orders (
     request_id BIGINT PRIMARY KEY,
-    
+
     instrument_id VARCHAR(32),
     trigger_price DOUBLE PRECISION,
     compare_type INT, -- 0: >=, 1: <= (Matches CompareType enum)
@@ -167,3 +167,11 @@ CREATE TABLE IF NOT EXISTS tb_condition_orders (
 );
 
 -- CREATE INDEX IF NOT EXISTS idx_cond_status ON tb_condition_orders(status);
+
+-- Global Settings Table (用户配置/全局状态)
+-- 用于存储当前选中的策略、界面配置等持久化信息
+CREATE TABLE IF NOT EXISTS tb_settings (
+    key VARCHAR(64) PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

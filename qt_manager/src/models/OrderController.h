@@ -46,7 +46,8 @@ class OrderController : public QObject {
     // Condition Orders
     // Condition Orders
     Q_PROPERTY(QVariantList conditionOrderList READ conditionOrderList NOTIFY conditionOrderListChanged)
-    Q_PROPERTY(QVariantList strategyList READ strategyList NOTIFY strategyListChanged) // Added
+    Q_PROPERTY(QVariantList strategyList READ strategyList NOTIFY strategyListChanged) 
+    Q_PROPERTY(QString currentStrategy READ currentStrategy WRITE setCurrentStrategy NOTIFY currentStrategyChanged)
 
 public:
     explicit OrderController(QObject *parent = nullptr);
@@ -94,6 +95,8 @@ public:
     
     QVariantList conditionOrderList() const { return _conditionOrderList; }
     QVariantList strategyList() const { return _strategyList; }
+    QString currentStrategy() const { return _currentStrategy; }
+    void setCurrentStrategy(const QString& s);
 
 public slots:
     void onTick(const QJsonObject& json);
@@ -142,6 +145,7 @@ signals:
     void positionChanged();
     void conditionOrderListChanged();
     void strategyListChanged();
+    void currentStrategyChanged();
     void conditionOrderSound(const QString& soundType); // "triggered" or "cancelled"
 
 private:
@@ -185,6 +189,7 @@ private:
     // Condition orders data
     QVariantList _conditionOrderList;
     QVariantList _strategyList;
+    QString _currentStrategy;
 };
 
 } // namespace QuantLabs

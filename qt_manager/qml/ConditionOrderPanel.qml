@@ -260,29 +260,39 @@ Rectangle {
                                     width: parent.width
                                     height: 32
                                     
-                                    // 自动保存/恢复策略选择
-                                    onActivated: (index) => {
-                                        console.log("[Persistence] Saving strategy index:", index)
-                                        conditionSettings.savedStrategyIndex = index
-                                    }
-                                    Component.onCompleted: {
-                                        console.log("[Persistence] Init. Saved:", conditionSettings.savedStrategyIndex, "Count:", count)
-                                        if (count > conditionSettings.savedStrategyIndex) { 
-                                            currentIndex = conditionSettings.savedStrategyIndex 
-                                            console.log("[Persistence] Restored index:", currentIndex)
+                                    // 辅助函数：根据ID查找索引
+                                    function getStrategyIndex(sId) {
+                                        if (!sId) return 0
+                                        for (var i = 0; i < count; ++i) {
+                                            var item = (root.orderController && root.orderController.strategyList) ? root.orderController.strategyList[i] : null
+                                            if (item && item.id === sId) return i
                                         }
+                                        return 0
                                     }
-                                    onCountChanged: {
-                                        console.log("[Persistence] CountChanged. Saved:", conditionSettings.savedStrategyIndex, "Count:", count, "Current:", currentIndex)
-                                        // 仅当当前索引与保存的不一致，且保存的索引有效时才恢复
-                                        // 允许当前为 0 (默认) 或 -1 (未选中) 时恢复
-                                        if (count > 0 && conditionSettings.savedStrategyIndex < count) {
-                                            if ((currentIndex === 0 || currentIndex === -1) && conditionSettings.savedStrategyIndex !== 0) {
-                                                 currentIndex = conditionSettings.savedStrategyIndex
-                                                 console.log("[Persistence] Auto-restored index via CountChanged:", currentIndex)
+
+                                    // 核心修复：使用直接绑定
+                                    // 注意：这里使用 ID 绑定 currentIndex
+                                    currentIndex: getStrategyIndex(root.orderController ? root.orderController.currentStrategy : "")
+
+                                    // 监听手动切换
+                                    onActivated: {
+                                        var item = (root.orderController && root.orderController.strategyList) ? root.orderController.strategyList[index] : null
+                                        if (item) {
+                                            console.log("[ConditionPanel] User Select:", item.id)
+                                            if (root.orderController.currentStrategy !== item.id) {
+                                                root.orderController.currentStrategy = item.id
                                             }
                                         }
                                     }
+                                    
+                                    // 调试：监听后端变化并打印
+                                    Connections {
+                                        target: root.orderController
+                                        function onCurrentStrategyChanged() {
+                                            console.log("[ConditionPanel] Backend Strategy Changed to:", root.orderController.currentStrategy)
+                                        }
+                                    }
+                                    
                                     model: root.orderController ? root.orderController.strategyList : []
                                     textRole: "name"
                                     

@@ -230,22 +230,42 @@ void PositionModel::updatePrice(const QJsonObject& j) {
         
         if (!_instrument_to_indices.contains(id)) return;
 
+        bool profitChanged = false;
         for (int row : _instrument_to_indices[id]) {
             if (row < 0 || row >= _position_data.size()) continue;
             
-            _position_data[row].lastPrice = lastPrice;
-            _position_data[row].bidPrice1 = bidPrice1;
-            _position_data[row].askPrice1 = askPrice1;
-            _position_data[row].upperLimit = upperLimit;
-            _position_data[row].lowerLimit = lowerLimit;
+            PositionItem& item = _position_data[row];
+            item.lastPrice = lastPrice;
+            item.bidPrice1 = bidPrice1;
+            item.askPrice1 = askPrice1;
+            item.upperLimit = upperLimit;
+            item.lowerLimit = lowerLimit;
             
             if (_instrument_dict.contains(id)) {
-                _position_data[row].priceTick = _instrument_dict[id].price_tick;
+                item.priceTick = _instrument_dict[id].price_tick;
+            }
+            
+            // 实时计算浮动盈亏: (最新价 - 均价) × 持仓量 × 合约乘数 × 方向系数
+            if (item.data.position > 0 && lastPrice > 0) {
+                int mult = item.data.volume_multiple;
+                if (mult <= 0 && _instrument_dict.contains(id)) {
+                    mult = _instrument_dict[id].volume_multiple;
+                }
+                if (mult <= 0) mult = 1;
+                
+                double avgPrice = item.data.open_cost / (item.data.position * mult);
+                double dirSign = (item.data.direction == '2' || item.data.direction == '0') ? 1.0 : -1.0;
+                double oldProfit = item.data.pos_profit;
+                item.data.pos_profit = (lastPrice - avgPrice) * item.data.position * mult * dirSign;
+                
+                if (std::abs(oldProfit - item.data.pos_profit) > 0.001) profitChanged = true;
             }
             
             emit dataChanged(index(row), index(row), 
-                {LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
+                {LastPriceRole, PosProfitRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
         }
+        
+        if (profitChanged) recalcTotalProfit();
     } catch (...) {}
 }
 
@@ -253,6 +273,7 @@ void PositionModel::updatePriceBinary(const TickData& data) {
     QString id = QString::fromLatin1(data.instrument_id);
     if (!_instrument_to_indices.contains(id)) return;
     
+    bool profitChanged = false;
     for (int row : _instrument_to_indices[id]) {
         if (row < 0 || row >= _position_data.size()) continue;
         
@@ -267,9 +288,27 @@ void PositionModel::updatePriceBinary(const TickData& data) {
             item.priceTick = _instrument_dict[id].price_tick;
         }
         
+        // 实时计算浮动盈亏: (最新价 - 均价) × 持仓量 × 合约乘数 × 方向系数
+        if (item.data.position > 0 && data.last_price > 0) {
+            int mult = item.data.volume_multiple;
+            if (mult <= 0 && _instrument_dict.contains(id)) {
+                mult = _instrument_dict[id].volume_multiple;
+            }
+            if (mult <= 0) mult = 1;
+            
+            double avgPrice = item.data.open_cost / (item.data.position * mult);
+            double dirSign = (item.data.direction == '2' || item.data.direction == '0') ? 1.0 : -1.0;
+            double oldProfit = item.data.pos_profit;
+            item.data.pos_profit = (data.last_price - avgPrice) * item.data.position * mult * dirSign;
+            
+            if (std::abs(oldProfit - item.data.pos_profit) > 0.001) profitChanged = true;
+        }
+        
         emit dataChanged(index(row), index(row), 
-            {LastPriceRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
+            {LastPriceRole, PosProfitRole, BidPrice1Role, AskPrice1Role, PriceTickRole, UpperLimitRole, LowerLimitRole});
     }
+    
+    if (profitChanged) recalcTotalProfit();
 }
 
 void PositionModel::updateInstrument(const QJsonObject& j) {

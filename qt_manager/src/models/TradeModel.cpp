@@ -2,6 +2,9 @@
 
 #include <QDebug>
 #include <QThread>
+#include <QVariantList>
+#include <QVariantMap>
+#include <map>
 
 namespace QuantLabs {
 
@@ -101,11 +104,69 @@ void TradeModel::onTradeReceived(const QJsonObject& j) {
             endInsertRows();
             
             emit tradeSoundTriggered();
+            emit summaryChanged();
         }
 
     } catch (const std::exception& e) {
         qDebug() << "[TradeModel] Error:" << e.what();
     }
+}
+
+QVariantList TradeModel::getTradeSummary() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+    
+    // 分组键: instrument_id + direction + offset_flag
+    struct SummaryGroup {
+        double totalAmount = 0.0;  // sum(price * volume)，用于算均价
+        int totalVolume = 0;
+        double totalCommission = 0.0;
+        double totalCloseProfit = 0.0;
+    };
+    
+    // 用 tuple 作为 key：(instrument_id, direction, offset_flag)
+    // 但 std::map 需要 string key，所以拼接
+    std::map<QString, SummaryGroup> groups;
+    // 保持插入顺序，记录首次出现的 key
+    std::vector<QString> keyOrder;
+    // 额外记录每个 key 对应的 direction 和 offset_flag
+    std::map<QString, std::pair<QString, QString>> keyMeta;
+    
+    for (const auto& t : _trades) {
+        // 简化 offset: "1"/"3"/"4" 都归为平仓
+        QString offsetGroup = (t.offset_flag == "0") ? "0" : "1";
+        QString key = t.instrument_id + "|" + t.direction + "|" + offsetGroup;
+        
+        auto& g = groups[key];
+        if (g.totalVolume == 0) {
+            keyOrder.push_back(key);
+            keyMeta[key] = {t.direction, offsetGroup};
+        }
+        g.totalAmount += t.price * t.volume;
+        g.totalVolume += t.volume;
+        g.totalCommission += t.commission;
+        g.totalCloseProfit += t.close_profit;
+    }
+    
+    QVariantList result;
+    for (const auto& key : keyOrder) {
+        const auto& g = groups[key];
+        const auto& meta = keyMeta[key];
+        
+        // 从 key 中提取 instrument_id
+        QString instrumentId = key.section('|', 0, 0);
+        
+        QVariantMap row;
+        row["instrumentId"] = instrumentId;
+        row["direction"] = meta.first;
+        row["offsetFlag"] = meta.second;
+        row["avgPrice"] = (g.totalVolume > 0) ? (g.totalAmount / g.totalVolume) : 0.0;
+        row["totalVolume"] = g.totalVolume;
+        row["totalCommission"] = g.totalCommission;
+        row["totalCloseProfit"] = g.totalCloseProfit;
+        result.append(row);
+    }
+    
+    return result;
 }
 
 } // namespace QuantLabs

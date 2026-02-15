@@ -64,8 +64,8 @@ public:
     std::vector<InstrumentMeta> loadAllInstruments();
 
     void saveInstrument(const InstrumentMeta& data);
-    void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "");
-    void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "", double commission = 0.0, double close_profit = 0.0);
+    void saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id = "", const std::string& trading_day = "");
+    void saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id = "", double commission = 0.0, double close_profit = 0.0, const std::string& trading_day = "");
     void saveConditionOrder(const ConditionOrderRequest& order); // Added
 
     // Condition Order State
@@ -80,6 +80,10 @@ public:
 
     // Strategy Management
     std::vector<std::pair<std::string, std::string>> loadStrategies();
+
+    // Global Settings
+    void setSetting(const std::string& key, const std::string& value);
+    std::string getSetting(const std::string& key);
 
 
 private:

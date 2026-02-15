@@ -279,6 +279,7 @@ void OrderController::sendOrder(const QString& direction, const QString& offset,
     }
 
     j["vol"] = _volume;
+    j["strategy_id"] = _currentStrategy.toStdString();
 
     emit orderSent(QString::fromStdString(j.dump()));
     qDebug() << "Order Published:" << _instrumentId << direction << offset << priceType;
@@ -633,6 +634,20 @@ QVariantList OrderController::searchInstruments(const QString& keyword, int maxR
 
 bool OrderController::isValidInstrument(const QString& instrumentId) const {
     return _instrument_dict.contains(instrumentId);
+}
+
+void OrderController::setCurrentStrategy(const QString& s) {
+    if (_currentStrategy != s) {
+        _currentStrategy = s;
+        emit currentStrategyChanged();
+        
+        // Send to Core
+        nlohmann::json j;
+        j["type"] = "SET_STRATEGY";
+        j["id"] = s.toStdString();
+        emit orderSent(QString::fromStdString(j.dump()));
+        qDebug() << "[OrderController] Set Strategy:" << s;
+    }
 }
 
 } // namespace QuantLabs

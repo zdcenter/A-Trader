@@ -7,6 +7,7 @@
 #include <thread>
 #include <chrono>
 #include "storage/DBManager.h"
+#include "utils/Encoding.h"
 
 namespace QuantLabs {
 
@@ -73,7 +74,7 @@ void TraderHandler::OnRspAuthenticate(CThostFtdcRspAuthenticateField *pAuth, CTh
         std::cout << "[Td] Authenticate Success. Requesting User Login..." << std::endl;
         reqUserLogin();
     } else {
-        std::cerr << "[Td] Authenticate Failed: " << (pRspInfo ? pRspInfo->ErrorMsg : "Unknown") << std::endl;
+        std::cerr << "[Td] Authenticate Failed: " << (pRspInfo ? utils::gbk_to_utf8(pRspInfo->ErrorMsg) : "Unknown") << std::endl;
     }
 }
 
@@ -93,6 +94,14 @@ void TraderHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, C
         current_trading_day_ = pRspUserLogin->TradingDay;
         std::cout << "[Td] Login Success. Day:" << current_trading_day_ << " Confirming..." << std::endl;
         
+        // Load global settings (Current Strategy)
+        std::string saved_strategy = DBManager::instance().getSetting("current_strategy_id");
+        if (!saved_strategy.empty()) {
+             std::lock_guard<std::mutex> lock(order_strategy_mtx_);
+             current_strategy_id_ = saved_strategy;
+             std::cout << "[Td] Loaded Current Strategy: " << current_strategy_id_ << std::endl;
+        }
+
         m_posManager.SetTradingDay(current_trading_day_);
         loadInstrumentsFromDB();
         syncSubscribedInstruments();
@@ -111,7 +120,7 @@ void TraderHandler::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, C
 
         confirmSettlement();
     } else {
-        std::cerr << "[Td] Login Failed: " << (pRspInfo ? pRspInfo->ErrorMsg : "Unknown") << std::endl;
+        std::cerr << "[Td] Login Failed: " << (pRspInfo ? utils::gbk_to_utf8(pRspInfo->ErrorMsg) : "Unknown") << std::endl;
     }
 }
 
@@ -166,7 +175,7 @@ void TraderHandler::qryInstrument(const std::string& instrument_id) {
 
 void TraderHandler::OnRspQryInstrument(CThostFtdcInstrumentField *pInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
     if (pRspInfo && pRspInfo->ErrorID != 0) {
-        std::cerr << "[Td Error] QryInstrument Failed: " << pRspInfo->ErrorMsg << std::endl;
+        std::cerr << "[Td Error] QryInstrument Failed: " << utils::gbk_to_utf8(pRspInfo->ErrorMsg) << std::endl;
         return;
     }
 
@@ -311,7 +320,7 @@ void TraderHandler::qryPositionDetail() {
 
 void TraderHandler::OnRspQryInvestorPositionDetail(CThostFtdcInvestorPositionDetailField *pDetail, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
     if (pRspInfo && pRspInfo->ErrorID != 0) {
-        std::cerr << "[Td Error] Qry Position Detail Failed: " << pRspInfo->ErrorMsg << std::endl;
+        std::cerr << "[Td Error] Qry Position Detail Failed: " << utils::gbk_to_utf8(pRspInfo->ErrorMsg) << std::endl;
         return;
     }
 
@@ -626,11 +635,20 @@ void TraderHandler::OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommiss
 
 
 int TraderHandler::insertOrder(const std::string& instrument, double price, int volume, char direction, char offset, char priceType, const std::string& strategy_id) {
-    CThostFtdcInputOrderField req;
-    std::memset(&req, 0, sizeof(req));
-    std::strncpy(req.BrokerID, broker_id_.c_str(), sizeof(req.BrokerID));
-    std::strncpy(req.InvestorID, user_id_.c_str(), sizeof(req.InvestorID));
-    std::strncpy(req.InstrumentID, instrument.c_str(), sizeof(req.InstrumentID));
+    if (!td_api_) return -1;
+
+    // Use Current Strategy if not specified
+    std::string actual_strategy_id = strategy_id;
+    if (actual_strategy_id.empty()) {
+        std::lock_guard<std::mutex> lock(order_strategy_mtx_);
+        actual_strategy_id = current_strategy_id_;
+    }
+    
+    CThostFtdcInputOrderField order = {0};
+    
+    std::strncpy(order.BrokerID, broker_id_.c_str(), sizeof(order.BrokerID));
+    std::strncpy(order.InvestorID, user_id_.c_str(), sizeof(order.InvestorID));
+    std::strncpy(order.InstrumentID, instrument.c_str(), sizeof(order.InstrumentID));
     
     // 极致性能高频 OrderRef: DDHHMMSS(Cache) + uuu(Realtime) -> 11位
     // 零堆内存分配，秒级缓存避免 localtime_r 开销
@@ -683,7 +701,7 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
         ref[11] = '\0';
     }
     
-    std::strncpy(req.OrderRef, ref, sizeof(req.OrderRef));
+    std::strncpy(order.OrderRef, ref, sizeof(order.OrderRef));
     // Auto-adjust OffsetFlag for SHFE/INE (Smart Close)
     char finalOffset = offset;
     
@@ -719,40 +737,44 @@ int TraderHandler::insertOrder(const std::string& instrument, double price, int 
         }
     }
 
-    req.OrderPriceType = priceType;
-    req.Direction = direction; 
-    req.CombOffsetFlag[0] = finalOffset;
-    req.CombHedgeFlag[0] = THOST_FTDC_HF_Speculation;
+    order.OrderPriceType = priceType;
+    order.Direction = direction; 
+    order.CombOffsetFlag[0] = finalOffset;
+    order.CombHedgeFlag[0] = THOST_FTDC_HF_Speculation;
     
     if (priceType == THOST_FTDC_OPT_AnyPrice) {
         // [FIX] SHFE/INE rejects AnyPrice. Use LimitPrice with actual price + IOC for market behavior.
         // Frontend passes lastPrice, which is a reasonable base for immediate execution.
-        req.OrderPriceType = THOST_FTDC_OPT_LimitPrice;
-        req.LimitPrice = price; // Use the price passed from frontend (lastPrice)
-        req.TimeCondition = THOST_FTDC_TC_IOC; 
-        req.VolumeCondition = THOST_FTDC_VC_AV;
+        order.OrderPriceType = THOST_FTDC_OPT_LimitPrice;
+        order.LimitPrice = price; // Use the price passed from frontend (lastPrice)
+        order.TimeCondition = THOST_FTDC_TC_IOC; 
+        order.VolumeCondition = THOST_FTDC_VC_AV;
         
         std::cout << "[Td] Simulating Market Order (IOC): " << instrument 
-                  << " Dir:" << direction << " Price:" << req.LimitPrice << std::endl;
+                  << " Dir:" << direction << " Price:" << order.LimitPrice << std::endl;
     } else {
-        req.LimitPrice = price;
-        req.TimeCondition = THOST_FTDC_TC_GFD;
-        req.VolumeCondition = THOST_FTDC_VC_AV;
+        order.LimitPrice = price;
+        order.TimeCondition = THOST_FTDC_TC_GFD;
+        order.VolumeCondition = THOST_FTDC_VC_AV;
     }
 
-    req.VolumeTotalOriginal = volume;
-    req.ContingentCondition = THOST_FTDC_CC_Immediately;
-    req.ForceCloseReason = THOST_FTDC_FCC_NotForceClose;
-    req.IsAutoSuspend = 0;
-    req.UserForceClose = 0;
+    order.VolumeTotalOriginal = volume;
+    order.ContingentCondition = THOST_FTDC_CC_Immediately;
+    order.ForceCloseReason = THOST_FTDC_FCC_NotForceClose;
+    order.IsAutoSuspend = 0;
+    order.UserForceClose = 0;
     
-    // 存储 OrderRef 到 strategy_id 的映射
-    if (!strategy_id.empty()) {
+    // 记录 OrderRef -> StrategyID 映射
+    {
         std::lock_guard<std::mutex> lock(order_strategy_mtx_);
-        order_strategy_map_[ref] = strategy_id;
+        order_strategy_map_[ref] = actual_strategy_id;
     }
-    
-    return td_api_->ReqOrderInsert(&req, 0);
+
+    int ret = td_api_->ReqOrderInsert(&order, next_req_id_++);
+    if (ret != 0) {
+        std::cerr << "[Td Error] ReqOrderInsert Failed: " << ret << std::endl;
+    }
+    return ret;
 }
 
 int TraderHandler::cancelOrder(const std::string& instrument, const std::string& orderSysID, const std::string& orderRef, const std::string& exchangeID, int frontID, int sessionID) {
@@ -818,6 +840,22 @@ int TraderHandler::cancelOrder(const std::string& instrument, const std::string&
     return td_api_->ReqOrderAction(&req, next_req_id_++);
 }
 
+void TraderHandler::setCurrentStrategy(const std::string& strategy_id) {
+    if (strategy_id.empty()) return;
+    {
+        std::lock_guard<std::mutex> lock(order_strategy_mtx_);
+        current_strategy_id_ = strategy_id;
+    }
+    DBManager::instance().setSetting("current_strategy_id", strategy_id);
+    std::cout << "[Td] Set Current Strategy => " << strategy_id << std::endl;
+}
+
+std::string TraderHandler::getCurrentStrategy() const {
+    // If called from main thread while worker updates, we might see partial string (rare on modern arch for short string SSO).
+    // Safe enough for UI display.
+    return current_strategy_id_;
+}
+
 void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
     if (pOrder) {
         std::cout << "[Td] Order Update: " << pOrder->OrderSysID << " Status: " << pOrder->OrderStatus << std::endl;
@@ -841,7 +879,7 @@ void TraderHandler::OnRtnOrder(CThostFtdcOrderField *pOrder) {
         pub_.publishOrder(pOrder);
         
         // 2. 保存到数据库（带 strategy_id）
-        DBManager::instance().saveOrder(pOrder, strategy_id);
+        DBManager::instance().saveOrder(pOrder, strategy_id, current_trading_day_);
     }
 }
 
@@ -906,8 +944,8 @@ void TraderHandler::OnRtnTrade(CThostFtdcTradeField *pTrade) {
                        << " PnL:" << realized_pnl << std::endl;
         }
 
-        // 2. 保存到数据库（带 strategy_id, commission, close_profit）
-        DBManager::instance().saveTrade(pTrade, strategy_id, commission, close_profit);
+        // 2. 保存到数据库（带 strategy_id, commission, close_profit, trading_day）
+        DBManager::instance().saveTrade(pTrade, strategy_id, commission, close_profit, current_trading_day_);
         // 3. 更新缓存 (用于重连同步)
         bool exists = false;
         for (const auto& t : trade_cache_) {
@@ -1021,20 +1059,20 @@ void TraderHandler::updateLocalAccount(CThostFtdcTradeField *pTrade, double comm
 }
 
 void TraderHandler::OnRspOrderInsert(CThostFtdcInputOrderField *pInput, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
-    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] Order Insert Error: " << pRspInfo->ErrorMsg << std::endl;
+    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] Order Insert Error: " << utils::gbk_to_utf8(pRspInfo->ErrorMsg) << std::endl;
 }
 
 void TraderHandler::OnErrRtnOrderInsert(CThostFtdcInputOrderField *pInput, CThostFtdcRspInfoField *pRspInfo) {
-    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] ErrRtn Insert: " << pRspInfo->ErrorMsg << std::endl;
+    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] ErrRtn Insert: " << utils::gbk_to_utf8(pRspInfo->ErrorMsg) << std::endl;
 }
 
 // 撤单报错
 void TraderHandler::OnRspOrderAction(CThostFtdcInputOrderActionField *pInput, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
-    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] RspOrderAction Error: " << pRspInfo->ErrorMsg << " (" << pRspInfo->ErrorID << ")" << std::endl;
+    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] RspOrderAction Error: " << utils::gbk_to_utf8(pRspInfo->ErrorMsg) << " (" << pRspInfo->ErrorID << ")" << std::endl;
 }
 
 void TraderHandler::OnErrRtnOrderAction(CThostFtdcOrderActionField *pAction, CThostFtdcRspInfoField *pRspInfo) {
-    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] ErrRtn Action: " << pRspInfo->ErrorMsg << " (" << pRspInfo->ErrorID << ")" << std::endl;
+    if (pRspInfo && pRspInfo->ErrorID != 0) std::cerr << "[Td] ErrRtn Action: " << utils::gbk_to_utf8(pRspInfo->ErrorMsg) << " (" << pRspInfo->ErrorID << ")" << std::endl;
 }
 
 

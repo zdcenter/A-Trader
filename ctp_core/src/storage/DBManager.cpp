@@ -85,18 +85,22 @@ void DBManager::saveInstrument(const InstrumentMeta& data) {
     cv_.notify_one();
 }
 
-void DBManager::saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id) {
+void DBManager::saveOrder(const CThostFtdcOrderField* pOrder, const std::string& strategy_id, const std::string& trading_day) {
     if (!pOrder) return;
     std::lock_guard<std::mutex> lock(queueMutex_);
     DBTask task;
     task.type = DBTaskType::ORDER;
     task.strategy_id = strategy_id;
     std::memcpy(&task.order, pOrder, sizeof(CThostFtdcOrderField));
+    // 如果传入了 trading_day (通常是当前交易日)，覆盖原始 InsertDate
+    if (!trading_day.empty()) {
+        std::strncpy(task.order.InsertDate, trading_day.c_str(), sizeof(task.order.InsertDate) - 1);
+    }
     tasks_.push(task);
     cv_.notify_one();
 }
 
-void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id, double commission, double close_profit) {
+void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string& strategy_id, double commission, double close_profit, const std::string& trading_day) {
     if (!pTrade) return;
     std::lock_guard<std::mutex> lock(queueMutex_);
     DBTask task;
@@ -105,6 +109,10 @@ void DBManager::saveTrade(const CThostFtdcTradeField* pTrade, const std::string&
     task.commission = commission;
     task.close_profit = close_profit;
     std::memcpy(&task.trade, pTrade, sizeof(CThostFtdcTradeField));
+    // 如果传入了 trading_day，覆盖原始 TradeDate
+    if (!trading_day.empty()) {
+        std::strncpy(task.trade.TradeDate, trading_day.c_str(), sizeof(task.trade.TradeDate) - 1);
+    }
     tasks_.push(task);
     cv_.notify_one();
 }
@@ -166,14 +174,13 @@ std::vector<ConditionOrderRequest> DBManager::loadConditionOrders(bool onlyActiv
         if (onlyActive) {
             // Load only Pending (0)
             sql = "SELECT instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, request_id, strategy_id "
-                  "FROM tb_condition_orders WHERE status = 0";
+                  "FROM tb_condition_orders WHERE status = 0 ORDER BY request_id DESC";
         } else {
-            // Load History for Frontend (Limit to recent 24h to avoid too many records)
-            // Use ASC order so frontend prepend works correctly (similar to Orders/Trades)
+            // Load History for Frontend (Show all mixed, Limit 200)
+            // Removed 24h limit because condition orders are long-standing
             sql = "SELECT instrument_id, trigger_price, compare_type, status, direction, offset_flag, volume, limit_price, request_id, strategy_id "
                   "FROM tb_condition_orders "
-                  "WHERE insert_time >= NOW() - INTERVAL '24 hours' "
-                  "ORDER BY insert_time ASC";
+                  "ORDER BY request_id DESC LIMIT 200";
         }
 
         pqxx::result r = txn.exec(sql);
@@ -402,17 +409,32 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
         }
         else if (task.type == DBTaskType::ORDER) {
             const auto& o = task.order;
-            // 报单记录 (Upsert)
-            // 注意: LimitPrice 可能很大，OrderRef 唯一性
+            // 报单记录: 先 UPDATE 再 INSERT，避免 SERIAL 序列号跳跃
             std::string dir(1, o.Direction);
             std::string offset(1, o.CombOffsetFlag[0]);
             std::string status(1, o.OrderStatus);
             
-            // Added strategy_id at param $13, broker_id at $14, insert_date at $15
-            // Added volume_traded at $16, volume_total at $17
-            txn.exec_params("INSERT INTO tb_orders (front_id, session_id, order_ref, instrument_id, exchange_id, limit_price, volume_total_original, direction, offset_flag, order_status, status_msg, insert_time, strategy_id, broker_id, insert_date, volume_traded, volume_total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) ON CONFLICT (front_id, session_id, order_ref) DO UPDATE SET order_status=$10, status_msg=$11, volume_traded=$16, volume_total=$17, strategy_id=$13, broker_id=$14, insert_date=$15",
-                o.FrontID, o.SessionID, o.OrderRef, o.InstrumentID, o.ExchangeID, o.LimitPrice, o.VolumeTotalOriginal, 
-                dir, offset, status, o.StatusMsg, o.InsertTime, task.strategy_id, o.BrokerID, o.InsertDate, o.VolumeTraded, o.VolumeTotal);
+            // 先尝试更新已有报单（状态回报场景）
+            auto r = txn.exec_params(
+                "UPDATE tb_orders SET order_status=$4, status_msg=$5, "
+                "volume_traded=$6, volume_total=$7, insert_date=$8 "
+                "WHERE front_id=$1 AND session_id=$2 AND order_ref=$3",
+                o.FrontID, o.SessionID, o.OrderRef,
+                status, o.StatusMsg, o.VolumeTraded, o.VolumeTotal, o.InsertDate);
+            
+            // 没有匹配行 = 新报单，才 INSERT（消耗一个 SERIAL id）
+            if (r.affected_rows() == 0) {
+                txn.exec_params(
+                    "INSERT INTO tb_orders (front_id, session_id, order_ref, instrument_id, "
+                    "exchange_id, limit_price, volume_total_original, direction, offset_flag, "
+                    "order_status, status_msg, insert_time, strategy_id, broker_id, "
+                    "insert_date, volume_traded, volume_total) "
+                    "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
+                    o.FrontID, o.SessionID, o.OrderRef, o.InstrumentID, o.ExchangeID,
+                    o.LimitPrice, o.VolumeTotalOriginal, dir, offset,
+                    status, o.StatusMsg, o.InsertTime, task.strategy_id, o.BrokerID,
+                    o.InsertDate, o.VolumeTraded, o.VolumeTotal);
+            }
         }
         else if (task.type == DBTaskType::TRADE) {
             const auto& t = task.trade;
@@ -420,9 +442,9 @@ void DBManager::processTask(pqxx::work& txn, const DBTask& task) {
             std::string offset(1, t.OffsetFlag);
             
             // Added strategy_id at param $10, broker_id at $11
-            // Added commission at $12, close_profit at $13
-            txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time, strategy_id, broker_id, commission, close_profit) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
-                 t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime, task.strategy_id, t.BrokerID, task.commission, task.close_profit);
+            // Added commission at $12, close_profit at $13, trade_date at $14
+            txn.exec_params("INSERT INTO tb_trades (exchange_id, trade_id, order_ref, instrument_id, direction, offset_flag, price, volume, trade_time, strategy_id, broker_id, commission, close_profit, trade_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT (exchange_id, trade_id, direction) DO NOTHING",
+                 t.ExchangeID, t.TradeID, t.OrderRef, t.InstrumentID, dir, offset, t.Price, t.Volume, t.TradeTime, task.strategy_id, t.BrokerID, task.commission, task.close_profit, t.TradeDate);
         }
         else if (task.type == DBTaskType::CONDITION_ORDER) {
             const auto& o = task.condition_order;
@@ -454,17 +476,16 @@ std::vector<CThostFtdcOrderField> DBManager::loadOrders(const std::string& tradi
         c.set_client_encoding("GB18030"); // Ensure retrieved data is GBK to match CTP behavior for Publisher
         pqxx::work txn(c);
         
-        // 加载最近的委托，改为 ASC 顺序，配合前端 insert(0) 逻辑，使启动后最新的在最上面
-        // 增加日期过滤，只加载当天的委托
+        // 只加载当天的委托，按 id 倒序（最新报单在前）
+        // 兼容历史数据：insert_date 为空或 NULL 的也加载
         std::string sql = "SELECT instrument_id, direction, offset_flag, limit_price, "
                           "volume_total_original, volume_traded, volume_total, "
                           "order_status, status_msg, "
                           "order_ref, front_id, session_id, exchange_id, insert_date, insert_time, broker_id "
-                          "FROM tb_orders WHERE (insert_date = " + txn.quote(trading_day) + 
-                          " OR insert_date = '' OR insert_date IS NULL) "
-                          "ORDER BY insert_date ASC, insert_time ASC LIMIT 1000";
+                          "FROM tb_orders WHERE insert_date = $1 "
+                          "ORDER BY id DESC LIMIT 1000";
         
-        pqxx::result r = txn.exec(sql);
+        pqxx::result r = txn.exec_params(sql, trading_day);
         std::cout << "[DB] loadOrders sql result size: " << r.size() << std::endl;
         
         for (auto row : r) {
@@ -517,23 +538,23 @@ std::vector<TradeData> DBManager::loadTrades(const std::string& trading_day) {
         std::string sql = "SELECT instrument_id, direction, offset_flag, price, volume, "
                           "trade_id, order_ref, exchange_id, trade_date, trade_time, broker_id, "
                           "commission, close_profit, strategy_id "
-                          "FROM tb_trades ORDER BY trade_date ASC, trade_time ASC LIMIT 1000";
+                          "FROM tb_trades WHERE trade_date = $1 ORDER BY id DESC LIMIT 1000";
 
-        pqxx::result r = txn.exec(sql);
+        pqxx::result r = txn.exec_params(sql, trading_day);
         for (auto row : r) {
             TradeData t = {};
             std::memset(&t, 0, sizeof(t));
 
             std::strncpy(t.instrument_id, row[0].c_str(), sizeof(t.instrument_id) - 1);
-            t.direction = row[1].c_str()[0];
-            t.offset_flag = row[2].c_str()[0];
+            if (!row[1].is_null()) t.direction = row[1].c_str()[0];
+            if (!row[2].is_null()) t.offset_flag = row[2].c_str()[0];
             t.price = row[3].as<double>();
             t.volume = row[4].as<int>();
-            std::strncpy(t.trade_id, row[5].c_str(), sizeof(t.trade_id) - 1);
-            std::strncpy(t.order_ref, row[6].c_str(), sizeof(t.order_ref) - 1);
-            std::strncpy(t.exchange_id, row[7].c_str(), sizeof(t.exchange_id) - 1);
-            std::strncpy(t.trade_date, row[8].c_str(), sizeof(t.trade_date) - 1);
-            std::strncpy(t.trade_time, row[9].c_str(), sizeof(t.trade_time) - 1);
+            if (!row[5].is_null()) std::strncpy(t.trade_id, row[5].c_str(), sizeof(t.trade_id) - 1);
+            if (!row[6].is_null()) std::strncpy(t.order_ref, row[6].c_str(), sizeof(t.order_ref) - 1);
+            if (!row[7].is_null()) std::strncpy(t.exchange_id, row[7].c_str(), sizeof(t.exchange_id) - 1);
+            if (!row[8].is_null()) std::strncpy(t.trade_date, row[8].c_str(), sizeof(t.trade_date) - 1);
+            if (!row[9].is_null()) std::strncpy(t.trade_time, row[9].c_str(), sizeof(t.trade_time) - 1);
             
             // Extended fields
             if (!row[11].is_null()) t.commission = row[11].as<double>();
@@ -589,6 +610,52 @@ std::vector<TradeData> DBManager::loadAllTradesAsc() {
         std::cerr << "[DB] loadAllTradesAsc Error: " << e.what() << std::endl;
     }
     return list;
+}
+
+
+
+// Global Settings Implementation
+void DBManager::setSetting(const std::string& key, const std::string& value) {
+    if (connStr_.empty()) return;
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::work txn(c);
+        
+        // Check table
+        pqxx::result table_check = txn.exec("SELECT to_regclass('public.tb_settings')");
+        if (table_check[0][0].is_null()) {
+             txn.exec("CREATE TABLE IF NOT EXISTS tb_settings (key VARCHAR(64) PRIMARY KEY, value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+        }
+        
+        // Upsert
+        txn.exec_params(
+            "INSERT INTO tb_settings (key, value, updated_at) VALUES ($1, $2, NOW()) "
+            "ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()",
+            key, value
+        );
+        txn.commit();
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] setSetting Error: " << e.what() << std::endl;
+    }
+}
+
+std::string DBManager::getSetting(const std::string& key) {
+    if (connStr_.empty()) return "";
+    try {
+        pqxx::connection c(connStr_);
+        pqxx::nontransaction txn(c);
+        
+        pqxx::result table_check = txn.exec("SELECT to_regclass('public.tb_settings')");
+        if (table_check[0][0].is_null()) return "";
+
+        pqxx::result r = txn.exec_params("SELECT value FROM tb_settings WHERE key = $1", key);
+        if (!r.empty() && !r[0][0].is_null()) {
+            return r[0][0].c_str();
+        }
+    } catch (const std::exception& e) {
+        // quiet for get
+    }
+    return "";
 }
 
 } // namespace QuantLabs

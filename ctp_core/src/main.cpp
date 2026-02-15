@@ -159,7 +159,12 @@ int main() {
              if (!pt.empty()) priceType = pt[0];
         }
         
-        td_handler.insertOrder(id, price, vol, dir, off, priceType);
+        std::string strategy_id;
+        if (req.contains("strategy_id")) {
+             strategy_id = req["strategy_id"];
+        }
+        
+        td_handler.insertOrder(id, price, vol, dir, off, priceType, strategy_id);
         return "{\"status\":\"ok\",\"msg\":\"Order sent to CTP\"}";
     };
     
@@ -355,6 +360,14 @@ int main() {
         pub.publish(QuantLabs::TOPIC_STRATEGY, msg.dump());
         
         return msg.dump();
+    };
+
+    // 7. 设置当前策略
+    handlers["SET_STRATEGY"] = [&](const json& req) -> std::string {
+        if (!req.contains("id")) return "{\"status\":\"error\",\"msg\":\"Missing id\"}";
+        std::string s_id = req["id"];
+        td_handler.setCurrentStrategy(s_id);
+        return "{\"status\":\"ok\",\"msg\":\"Current Strategy Set\"}";
     };
 
     // 启动服务，分发指令

@@ -9,6 +9,7 @@
         <file>TradeListPanel.qml</file>
         <file>ConditionOrderPanel.qml</file>
         <file>ConditionListPanel.qml</file>
+        <file>ConditionOrderDialog.qml</file>
         <file>SettingsWindow.qml</file>
     </qresource>
 </RCC>
